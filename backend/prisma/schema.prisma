@@ -1,0 +1,241 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Vai trò người dùng trong hệ thống
+enum Role {
+  PATIENT      // Bệnh nhân - người đặt lịch hẹn và xem bệnh án
+  DOCTOR       // Bác sĩ - người khám bệnh, quản lý lịch và lên bệnh án
+  RECEPTIONIST // Lễ tân - người xác nhận lịch, check-in và điều phối hàng đợi
+  ADMIN        // Quản trị viên - người quản lý hệ thống, danh mục chuyên khoa
+}
+
+/// Trạng thái tài khoản người dùng
+enum UserStatus {
+  ACTIVE // Tài khoản đang hoạt động bình thường
+  LOCKED // Tài khoản bị khóa (không thể đăng nhập)
+}
+
+/// Trạng thái của một slot thời gian
+enum SlotStatus {
+  AVAILABLE // Khung giờ còn trống, bệnh nhân có thể đặt lịch
+  BOOKED    // Khung giờ đã được bệnh nhân đặt thành công
+  LOCKED    // Khung giờ bị khóa thủ công (bác sĩ nghỉ đột xuất, họp, bảo trì...)
+}
+
+/// Trạng thái lịch hẹn — vòng đời đầy đủ của một ca đặt lịch
+enum AppointmentStatus {
+  PENDING     // Vừa đặt lịch xong trực tuyến, chờ lễ tân/hệ thống xác nhận
+  CONFIRMED   // Đã được xác nhận hợp lệ
+  CHECKED_IN  // Bệnh nhân đã đến quầy lễ tân và được xác nhận có mặt
+  IN_PROGRESS // Bệnh nhân đã vào phòng và đang trong quá trình khám
+  COMPLETED   // Đã khám xong hoàn toàn và có kết quả
+  CANCELLED   // Lịch hẹn bị hủy (bởi bệnh nhân chủ động hoặc do lễ tân)
+  NO_SHOW     // Bệnh nhân không đến khám (quá 15 phút so với giờ hẹn)
+}
+
+/// Trạng thái bệnh nhân trong hàng đợi khám tại phòng khám
+enum QueueStatus {
+  WAITING     // Đang ngồi chờ ở sảnh để được gọi vào phòng khám
+  IN_PROGRESS // Đang ở trong phòng để bác sĩ khám bệnh
+  DONE        // Đã khám xong và rời phòng
+  NO_SHOW     // Hệ thống/Lễ tân đã gọi tên nhưng không vào phòng
+}
+
+/// Bảng người dùng trung tâm — chứa thông tin cơ bản của tất cả các tài khoản (Tất cả role dùng chung)
+model User {
+  id               String     @id @default(uuid()) @db.Uuid          // Khóa chính, định dạng UUID tự động sinh
+  email            String     @unique @db.VarChar(255)               // Địa chỉ email dùng để đăng nhập (duy nhất)
+  passwordHash     String     @map("password_hash") @db.VarChar(255) // Mật khẩu đã được mã hóa (băm)
+  fullName         String     @map("full_name") @db.VarChar(100)     // Họ và tên đầy đủ
+  phone            String?    @db.VarChar(20)                        // Số điện thoại (có thể để trống)
+  birthDate        DateTime?  @map("birth_date") @db.Date            // Ngày tháng năm sinh (chỉ lưu ngày, không lưu giờ)
+  role             Role       @default(PATIENT)                      // Vai trò trong hệ thống, mặc định là PATIENT
+  status           UserStatus @default(ACTIVE)                       // Trạng thái tài khoản, mặc định là ACTIVE
+  refreshTokenHash String?    @map("refresh_token_hash") @db.VarChar(255) // Mã băm Refresh Token dùng để duy trì phiên đăng nhập mà không cần gõ lại mật khẩu
+  createdAt        DateTime   @default(now()) @map("created_at")     // Thời gian tạo tài khoản (mặc định là thời gian hiện tại)
+  updatedAt        DateTime   @updatedAt @map("updated_at")          // Tự động cập nhật thời gian mỗi khi thông tin thay đổi
+
+  // Các mối quan hệ (Relations)
+  doctorProfile Doctor?                                              // Quan hệ 1:1 sang thông tin Bác sĩ (nếu role là DOCTOR)
+  appointments  Appointment[] @relation("PatientAppointments")       // Một user có thể đặt nhiều lịch hẹn (đóng vai trò Patient)
+
+  @@map("users") // Đổi tên bảng trong Database thực tế thành "users"
+}
+
+/// Thông tin chuyên môn của bác sĩ (Mối quan hệ 1:1 với bảng User)
+model Doctor {
+  id          String   @id @default(uuid()) @db.Uuid         // Khóa chính hồ sơ bác sĩ (UUID)
+  userId      String   @unique @map("user_id") @db.Uuid      // Khóa ngoại liên kết duy nhất với bảng User
+  specialtyId String   @map("specialty_id") @db.Uuid         // Khóa ngoại liên kết với chuyên khoa của bác sĩ
+  licenseNo   String   @map("license_no") @db.VarChar(50)    // Số giấy phép hành nghề y tế
+  bio         String?  @db.Text                              // Giới thiệu bản thân, kinh nghiệm (văn bản dài)
+  isActive    Boolean  @default(true) @map("is_active")      // Trạng thái hoạt động (bật/tắt hiển thị bác sĩ trên ứng dụng)
+  createdAt   DateTime @default(now()) @map("created_at")    // Thời gian tạo hồ sơ bác sĩ
+  updatedAt   DateTime @updatedAt @map("updated_at")         // Thời gian cập nhật hồ sơ bác sĩ
+
+  // Định nghĩa mối quan hệ
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade) // Nếu xóa User ở bảng trên, hồ sơ Doctor này sẽ tự động xóa theo (Cascade)
+  specialty     Specialty      @relation(fields: [specialtyId], references: [id])              // Mỗi bác sĩ thuộc về một chuyên khoa
+  workSchedules WorkSchedule[]                                                                 // Một bác sĩ có nhiều ca làm việc tổng thể
+  slots         Slot[]                                                                         // Một bác sĩ có nhiều slot thời gian chi tiết
+  appointments  Appointment[]  @relation("DoctorAppointments")                                 // Một bác sĩ nhận lịch hẹn của nhiều bệnh nhân
+  queueEntries  QueueEntry[]                                                                   // Danh sách bệnh nhân đang nằm trong hàng đợi của bác sĩ này
+
+  @@map("doctors") // Đổi tên bảng trong Database thành "doctors"
+}
+
+/// Danh mục chuyên khoa của phòng khám (Khoa Nội, Khoa Nhi, Khoa Sản...) — do Admin quản lý
+model Specialty {
+  id          String   @id @default(uuid()) @db.Uuid      // Khóa chính chuyên khoa
+  name        String   @unique @db.VarChar(100)           // Tên chuyên khoa (duy nhất, ví dụ: "Khoa Nhi")
+  description String?  @db.Text                           // Mô tả chi tiết về chuyên khoa
+  isActive    Boolean  @default(true) @map("is_active")   // Chuyên khoa này có đang hoạt động/mở cửa không
+  createdAt   DateTime @default(now()) @map("created_at") // Thời gian tạo chuyên khoa
+  updatedAt   DateTime @updatedAt @map("updated_at")      // Thời gian cập nhật chuyên khoa
+
+  doctors Doctor[] // Một chuyên khoa có thể có nhiều bác sĩ trực thuộc
+
+  @@map("specialties") // Đổi tên bảng trong Database thành "specialties"
+}
+
+/// Ca làm việc tổng quát của bác sĩ — nguồn gốc để sinh ra các slot nhỏ hơn
+model WorkSchedule {
+  id              String   @id @default(uuid()) @db.Uuid          // Khóa chính của ca làm việc
+  doctorId        String   @map("doctor_id") @db.Uuid             // Khóa ngoại liên kết tới bác sĩ phụ trách ca này
+  workDate        DateTime @map("work_date") @db.Date             // Ngày làm việc (chỉ lấy ngày, ví dụ: 2026-06-01)
+  startTime       DateTime @map("start_time") @db.Time()          // Giờ bắt đầu ca làm việc (ví dụ: 08:00)
+  endTime         DateTime @map("end_time") @db.Time()            // Giờ kết thúc ca làm việc (ví dụ: 12:00)
+  slotDurationMin Int      @default(15) @map("slot_duration_min") // Độ dài tiêu chuẩn của một ca khám (mặc định là 15 phút)
+  createdAt       DateTime @default(now()) @map("created_at")      // Thời gian tạo ca làm việc này
+
+  doctor Doctor @relation(fields: [doctorId], references: [id], onDelete: Cascade) // Nếu xóa bác sĩ, ca làm việc tự động xóa theo
+  slots  Slot[]                                                                    // Các slot thời gian chi tiết được sinh ra từ ca làm việc này
+
+  @@unique([doctorId, workDate, startTime]) // Ràng buộc: Một bác sĩ không thể có 2 ca làm việc bắt đầu cùng một giờ trong cùng một ngày
+  @@index([doctorId, workDate])             // Tạo Index tối ưu hóa tìm kiếm lịch làm việc của một bác sĩ theo ngày cụ thể
+  @@map("work_schedules")                   // Đổi tên bảng trong Database thành "work_schedules"
+}
+
+/// Slot thời gian khám cụ thể — được chia nhỏ tự động từ WorkSchedule.
+/// Hỗ trợ chia tách linh hoạt (Nếu khám xong trước giờ hẹn: tạo slot con `parentSlotId` cho khoảng thời gian còn dư).
+model Slot {
+  id             String     @id @default(uuid()) @db.Uuid      // Khóa chính của slot thời gian
+  workScheduleId String     @map("work_schedule_id") @db.Uuid  // Thuộc về ca làm việc tổng quát nào
+  doctorId       String     @map("doctor_id") @db.Uuid         // Bác sĩ nào phụ trách slot này
+  date           DateTime   @db.Date                           // Ngày khám bệnh
+  startTime      DateTime   @map("start_time") @db.Time()       // Giờ bắt đầu slot (ví dụ: 08:00)
+  endTime        DateTime   @map("end_time") @db.Time()         // Giờ kết thúc slot (ví dụ: 08:15)
+  status         SlotStatus @default(AVAILABLE)                // Trạng thái slot (Trống, Đã đặt, hoặc Đang khóa)
+
+  /// Logic thông minh: ID của slot cha. Nếu slot gốc là 08:00–08:30 nhưng bác sĩ khám xong lúc 08:15, 
+  /// hệ thống sẽ tự sinh slot con từ 08:15–08:30 và lưu ID của slot cha vào đây nhằm tiếp tục cho bệnh nhân khác đặt lịch.
+  parentSlotId String? @map("parent_slot_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at") // Thời gian slot này được tạo ra
+
+  workSchedule WorkSchedule @relation(fields: [workScheduleId], references: [id], onDelete: Cascade) // Xóa ca làm việc gốc thì xóa luôn các slot nhỏ
+  doctor       Doctor       @relation(fields: [doctorId], references: [id])                       // Liên kết tới bác sĩ phụ trách
+  appointment  Appointment?                                                                        // Quan hệ 1:1 với lịch hẹn (Mỗi slot chỉ ứng với 1 cuộc hẹn thành công)
+
+  // Quan hệ đệ quy (Self-relation) để quản lý cấu trúc Slot Cha - Slot Con khi có hành động tách khung giờ
+  parentSlot Slot?  @relation("SlotSplit", fields: [parentSlotId], references: [id], onDelete: SetNull) // Nếu xóa slot cha, trường này ở slot con chuyển thành NULL
+  childSlots Slot[] @relation("SlotSplit") // Danh sách các slot con được tách ra từ slot hiện tại
+
+  @@index([doctorId, date, status]) // Index phục vụ chức năng "Tìm kiếm các khung giờ còn trống của một bác sĩ trong ngày"
+  @@index([parentSlotId])            // Index phục vụ việc truy vấn tìm các slot con đã tách
+  @@map("slots")                    // Đổi tên bảng trong Database thành "slots"
+}
+
+/// Lịch hẹn khám — Trái tim/Thực thể trung tâm kết nối toàn bộ hệ thống phòng khám
+model Appointment {
+  id        String            @id @default(uuid()) @db.Uuid      // Khóa chính lịch hẹn
+  patientId String            @map("patient_id") @db.Uuid        // Khóa ngoại nối tới User (người đi khám)
+  doctorId  String            @map("doctor_id") @db.Uuid         // Khóa ngoại nối tới Doctor (bác sĩ được đặt lịch)
+  slotId    String            @unique @map("slot_id") @db.Uuid   // Khóa ngoại duy nhất liên kết với Slot thời gian (Đảm bảo không trùng giờ)
+  symptoms  String?           @db.Text                           // Mô tả triệu chứng ban đầu do bệnh nhân tự nhập khi đặt lịch
+  notes     String?           @db.Text                           // Ghi chú thêm của lễ tân hoặc thông tin nội bộ
+  status    AppointmentStatus @default(PENDING)                  // Trạng thái cuộc hẹn, mặc định ban đầu là PENDING (Chờ duyệt)
+  createdAt DateTime          @default(now()) @map("created_at") // Thời gian bệnh nhân bấm nút đặt lịch hẹn
+  updatedAt DateTime          @updatedAt @map("updated_at")      // Thời gian cập nhật trạng thái lịch hẹn mới nhất
+
+  patient       User           @relation("PatientAppointments", fields: [patientId], references: [id]) // Định nghĩa quan hệ với Bệnh nhân
+  doctor        Doctor         @relation("DoctorAppointments", fields: [doctorId], references: [id])   // Định nghĩa quan hệ với Bác sĩ
+  slot          Slot           @relation(fields: [slotId], references: [id], onDelete: Restrict)       // Ràng buộc nghiêm ngặt: Không được phép xóa Slot nếu Slot đó đang có lịch hẹn gắn vào
+  medicalRecord MedicalRecord? // Lịch hẹn sau khi hoàn thành sẽ có 1 hồ sơ bệnh án duy nhất đi kèm
+  queueEntry    QueueEntry?    // Lịch hẹn sau khi CHECKED_IN sẽ sinh ra 1 phiếu nằm trong hàng đợi khám thực tế
+
+  @@index([patientId, status])   // Index giúp Bệnh nhân tra cứu nhanh danh sách lịch hẹn "Đã đặt/Đã hủy" của họ
+  @@index([doctorId, status])    // Index giúp Bác sĩ xem danh sách bệnh nhân "Chờ khám/Đang khám/Đã xong" trong ngày
+  @@index([status, createdAt])   // Index giúp lễ tân lọc các lịch hẹn đang "PENDING" mới nhất để duyệt nhanh
+  @@map("appointments")          // Đổi tên bảng trong Database thành "appointments"
+}
+
+/// Hàng đợi khám thực tế tại cơ sở y tế — Được tạo tự động ngay khi bệnh nhân đến quầy và thực hiện Check-in
+model QueueEntry {
+  id            String      @id @default(uuid()) @db.Uuid         // Khóa chính của lượt xếp hàng
+  appointmentId String      @unique @map("appointment_id") @db.Uuid // Khóa ngoại duy nhất nối ngược lại với lịch hẹn gốc
+  doctorId      String      @map("doctor_id") @db.Uuid            // Khóa ngoại xác định bệnh nhân này đang xếp hàng chờ bác sĩ nào
+  queueNo       Int         @map("queue_no")                      // Số thứ tự khám thực tế tại phòng (Số 1, Số 2, Số 3...)
+  status        QueueStatus @default(WAITING)                     // Trạng thái xếp hàng (Đang chờ, Đang khám, Đã xong, Bỏ lỡ)
+  estimatedWait Int         @default(0) @map("estimated_wait_min") // Thời gian dự kiến phải chờ đợi (tính bằng phút) cho bệnh nhân chuẩn bị tinh thần
+
+  calledAt    DateTime? @map("called_at")    // Thời điểm hệ thống hoặc lễ tân nhấn nút gọi số vào phòng khám
+  startedAt   DateTime? @map("started_at")   // Thời điểm thực tế bác sĩ bắt đầu ấn nút khám cho ca này
+  completedAt DateTime? @map("completed_at")  // Thời điểm thực tế bác sĩ kết thúc ca khám (Dùng số liệu này để làm căn cứ tính toán xem có cần tách slot còn dư hay không)
+
+  createdAt DateTime @default(now()) @map("created_at") // Thời điểm bệnh nhân check-in thành công và chính thức vào hàng đợi
+  updatedAt DateTime @updatedAt @map("updated_at")      // Thời điểm cập nhật trạng thái hàng đợi gần nhất
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade) // Nếu hủy/xóa lịch hẹn, thông tin xếp hàng tương ứng bị xóa theo
+  doctor      Doctor      @relation(fields: [doctorId], references: [id])                       // Liên kết tới thông tin bác sĩ phụ trách hàng đợi
+
+  @@index([doctorId, status]) // Index tối ưu cho màn hình hiển thị bảng điện tử trước cửa phòng khám của Bác sĩ (Ai đang chờ, ai đang khám)
+  @@map("queue_entries")      // Đổi tên bảng trong Database thành "queue_entries"
+}
+
+/// Hồ sơ bệnh án — Được bác sĩ tạo ra và điền thông tin sau khi kết thúc ca khám bệnh thành công
+model MedicalRecord {
+  id            String    @id @default(uuid()) @db.Uuid         // Khóa chính hồ sơ bệnh án
+  appointmentId String    @unique @map("appointment_id") @db.Uuid // Khóa ngoại liên kết duy nhất với lịch hẹn sinh ra bệnh án này
+  patientId     String    @map("patient_id") @db.Uuid           // Khóa ngoại xác định bệnh án này là của bệnh nhân nào
+  doctorId      String    @map("doctor_id") @db.Uuid            // Khóa ngoại xác định bác sĩ nào là người lập bệnh án
+  diagnosis     String    @db.Text                              // Kết luận chẩn đoán bệnh của bác sĩ (Ví dụ: Viêm họng cấp)
+  treatment     String    @map("treatment_plan") @db.Text       // Phác đồ/Kế hoạch điều trị chi tiết cho bệnh nhân
+  prescription  String?   @db.Text                              // Đơn thuốc/Liều lượng thuốc cần uống (Có thể để trống nếu không cần thuốc)
+  notes         String?   @db.Text                              // Ghi chú, căn dặn thêm từ bác sĩ (Kiêng ăn đồ cay, nghỉ ngơi...)
+  followUpDate  DateTime? @map("follow_up_date") @db.Date       // Ngày hẹn tái khám lần sau (Nếu có, chỉ cần lưu ngày)
+  createdAt     DateTime  @default(now()) @map("created_at")    // Ngày tạo hồ sơ bệnh án
+  updatedAt     DateTime  @updatedAt @map("updated_at")         // Ngày sửa đổi nội dung bệnh án gần nhất
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade) // Nếu xóa cuộc hẹn, bệnh án đi kèm sẽ tự động xóa theo để đồng bộ dữ liệu
+
+  @@index([patientId, createdAt]) // Index phục vụ tính năng "Xem lịch sử bệnh án từ trước đến nay của một bệnh nhân" xếp theo thứ tự thời gian
+  @@index([doctorId])            // Index phục vụ việc thống kê các bệnh án do bác sĩ này đã thực hiện
+  @@map("medical_records")       // Đổi tên bảng trong Database thành "medical_records"
+}
+
+/// Nhật ký hệ thống (Audit Log) — Dùng để ghi lại mọi hành động thay đổi dữ liệu nhằm mục đích bảo mật thông tin y tế (Chỉ cho phép thêm mới, không cho sửa/xóa)
+model AuditLog {
+  id             String   @id @default(uuid()) @db.Uuid      // Khóa chính nhật ký hệ thống
+  actorId        String   @map("actor_id") @db.Uuid          // ID của người thực hiện hành động (User ID)
+  actorRole      Role     @map("actor_role")                 // Vai trò của người thực hiện lúc đó (Để tra cứu nhanh quyền hạn)
+  action         String   @db.VarChar(100)                   // Tên hành động cụ thể (Ví dụ: "UPDATE_STATUS", "DELETE_USER")
+  targetResource String   @map("target_resource") @db.VarChar(50) // Tên bảng/Thực thể bị tác động (Ví dụ: "Appointment", "User")
+  targetId       String   @map("target_id") @db.Uuid         // ID chính xác của bản ghi bị tác động trong bảng đó
+  oldValue       Json?    @map("old_value")                  // Dữ liệu cũ trước khi thay đổi (Định dạng JSON) để đối chiếu
+  newValue       Json?    @map("new_value")                  // Dữ liệu mới sau khi thay đổi (Định dạng JSON) để xem họ đã sửa gì
+  ipAddress      String?  @map("ip_address") @db.VarChar(45)  // Địa chỉ IP của thiết bị thực hiện hành động (Hỗ trợ cả IPv4 và IPv6)
+  userAgent      String?  @map("user_agent") @db.VarChar(255) // Thông tin trình duyệt/Hệ điều hành/Thiết bị của người dùng sử dụng
+  createdAt      DateTime @default(now()) @map("created_at") // Thời điểm chính xác hành động này diễn ra
+
+  @@index([actorId, createdAt])        // Index giúp kiểm tra lịch sử thao tác của một tài khoản cụ thể theo thời gian
+  @@index([targetResource, targetId])  // Index giúp tra cứu xem bản ghi cụ thể này đã từng bị những ai sửa đổi, sửa vào lúc nào
+  @@index([action, createdAt])         // Index phục vụ Admin thống kê tần suất các hành động bất thường trong hệ thống
+  @@map("audit_logs")                 // Đổi tên bảng trong Database thành "audit_logs"
+}
