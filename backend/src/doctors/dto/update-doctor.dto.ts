@@ -21,7 +21,10 @@ export class UpdateDoctorDto {
   @IsOptional()
   phone?: string;
 
-  @IsDateString({}, { message: 'Ngày sinh không đúng định dạng ISO (YYYY-MM-DD)!' })
+  @IsDateString(
+    {},
+    { message: 'Ngày sinh không đúng định dạng ISO (YYYY-MM-DD)!' },
+  )
   @IsOptional()
   birthDate?: string;
 
@@ -32,7 +35,9 @@ export class UpdateDoctorDto {
   specialtyId?: string;
 
   @IsString({ message: 'Số giấy phép hành nghề phải là chuỗi ký tự!' })
-  @IsNotEmpty({ message: 'Số giấy phép hành nghề không được để trống nếu truyền lên!' })
+  @IsNotEmpty({
+    message: 'Số giấy phép hành nghề không được để trống nếu truyền lên!',
+  })
   @IsOptional()
   licenseNo?: string;
 

@@ -12,11 +12,11 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { Role } from '@prisma/client';
+import { Role } from '../auth/enums/role.enum';
 
 /**
  * Controller Quản lý Người dùng (Users Management)
- * 
+ *
  * Bảo vệ toàn cục:
  * 1. `JwtAuthGuard`: Xác minh JWT Access Token trong header `Authorization: Bearer <token>`.
  * 2. `RolesGuard`: Đọc metadata của decorator `@Roles(...)` để đối chiếu với vai trò người dùng trong Token.
@@ -81,4 +81,3 @@ export class UsersController {
     return this.usersService.unlock(id);
   }
 }
-

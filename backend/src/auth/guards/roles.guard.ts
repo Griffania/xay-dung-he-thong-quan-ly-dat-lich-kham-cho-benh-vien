@@ -1,6 +1,12 @@
-import { Injectable, CanActivate, ExecutionContext, Logger, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  CanActivate,
+  ExecutionContext,
+  Logger,
+  ForbiddenException,
+} from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { Role } from '@prisma/client';
+import { Role } from '../enums/role.enum';
 import { ROLES_KEY } from '../decorators/roles.decorator';
 
 interface RequestWithUser {
@@ -37,9 +43,11 @@ export class RolesGuard implements CanActivate {
     if (!user) {
       this.logger.warn(
         `Lỗi cấu hình Guards: RolesGuard được sử dụng nhưng request.user bị undefined. ` +
-        `Đảm bảo rằng JwtAuthGuard đã được áp dụng trước RolesGuard tại route: ${request?.method} ${request?.url}`
+          `Đảm bảo rằng JwtAuthGuard đã được áp dụng trước RolesGuard tại route: ${request?.method} ${request?.url}`,
       );
-      throw new ForbiddenException('Yêu cầu xác thực tài khoản trước khi phân quyền!');
+      throw new ForbiddenException(
+        'Yêu cầu xác thực tài khoản trước khi phân quyền!',
+      );
     }
     // 4. Kiểm tra xem vai trò của user hiện tại có khớp với các vai trò được phép không
     const hasRole = requiredRoles.includes(user.role);
@@ -48,14 +56,15 @@ export class RolesGuard implements CanActivate {
       const { method, url, ip } = request;
       this.logger.warn(
         `[TRUY CẬP TRÁI PHÉP] Người dùng không đủ quyền hạn. ` +
-        `User: ${user.email} (ID: ${user.userId}, Role: ${user.role}) ` +
-        `đã thử truy cập ${method} ${url} từ IP ${ip}. ` +
-        `Yêu cầu một trong các vai trò: [${requiredRoles.join(', ')}]`
+          `User: ${user.email} (ID: ${user.userId}, Role: ${user.role}) ` +
+          `đã thử truy cập ${method} ${url} từ IP ${ip}. ` +
+          `Yêu cầu một trong các vai trò: [${requiredRoles.join(', ')}]`,
       );
       // Ném lỗi 403 Forbidden kèm thông báo
-      throw new ForbiddenException('Bạn không có quyền truy cập vào tài nguyên này!');
+      throw new ForbiddenException(
+        'Bạn không có quyền truy cập vào tài nguyên này!',
+      );
     }
     return true;
   }
 }
-

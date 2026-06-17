@@ -6,7 +6,8 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateDoctorDto } from './dto/create-doctor.dto';
 import { UpdateDoctorDto } from './dto/update-doctor.dto';
-import { Role, UserStatus } from '@prisma/client';
+import { Role } from '../auth/enums/role.enum';
+import { UserStatus } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
@@ -28,6 +29,9 @@ export class DoctorsService {
   private sanitizeUser(user: any) {
     if (!user) return null;
     const { passwordHash, refreshTokenHash, ...sanitized } = user;
+    if (sanitized.role && typeof sanitized.role === 'object') {
+      sanitized.role = sanitized.role.code;
+    }
     return sanitized;
   }
   /**
@@ -76,7 +80,7 @@ export class DoctorsService {
           fullName,
           phone,
           birthDate: birthDate ? new Date(birthDate) : null,
-          role: Role.DOCTOR, // Thiết lập vai trò bắt buộc là DOCTOR
+          role: { connect: { code: 'DOCTOR' } },
           status: UserStatus.ACTIVE,
         },
       });
@@ -166,7 +170,9 @@ export class DoctorsService {
       this.prisma.doctor.findMany({
         where,
         include: {
-          user: true, // Kèm thông tin tài khoản cơ bản
+          user: {
+            include: { role: true },
+          }, // Kèm thông tin tài khoản cơ bản có role
           specialty: true, // Kèm thông tin chuyên khoa
         },
         skip,
@@ -211,7 +217,9 @@ export class DoctorsService {
     const doctor = await this.prisma.doctor.findUnique({
       where: { id },
       include: {
-        user: true,
+        user: {
+          include: { role: true },
+        },
         specialty: true,
       },
     });
@@ -256,7 +264,9 @@ export class DoctorsService {
         where: { id: updateDoctorDto.specialtyId },
       });
       if (!specialty) {
-        throw new NotFoundException('Không tìm thấy chuyên khoa mới được chỉ định!');
+        throw new NotFoundException(
+          'Không tìm thấy chuyên khoa mới được chỉ định!',
+        );
       }
     }
 
@@ -266,7 +276,11 @@ export class DoctorsService {
     // 3. Tiến hành cập nhật bằng Transaction
     await this.prisma.$transaction(async (tx) => {
       // Cập nhật thông tin cá nhân
-      if (fullName !== undefined || phone !== undefined || birthDate !== undefined) {
+      if (
+        fullName !== undefined ||
+        phone !== undefined ||
+        birthDate !== undefined
+      ) {
         await tx.user.update({
           where: { id: doctor.userId },
           data: {
@@ -278,7 +292,11 @@ export class DoctorsService {
       }
 
       // Cập nhật thông tin chuyên môn của bác sĩ
-      if (specialtyId !== undefined || licenseNo !== undefined || bio !== undefined) {
+      if (
+        specialtyId !== undefined ||
+        licenseNo !== undefined ||
+        bio !== undefined
+      ) {
         await tx.doctor.update({
           where: { id },
           data: {
@@ -321,7 +339,9 @@ export class DoctorsService {
       where: { id },
       data: { specialtyId },
       include: {
-        user: true,
+        user: {
+          include: { role: true },
+        },
         specialty: true,
       },
     });
@@ -356,7 +376,9 @@ export class DoctorsService {
       where: { id },
       data: { isActive: false },
       include: {
-        user: true,
+        user: {
+          include: { role: true },
+        },
         specialty: true,
       },
     });
@@ -390,7 +412,9 @@ export class DoctorsService {
       where: { id },
       data: { isActive: true },
       include: {
-        user: true,
+        user: {
+          include: { role: true },
+        },
         specialty: true,
       },
     });

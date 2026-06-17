@@ -15,11 +15,11 @@ import { AssignSpecialtyDto } from './dto/assign-specialty.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { Role } from '@prisma/client';
+import { Role } from '../auth/enums/role.enum';
 
 /**
  * Controller Quản lý Bác sĩ (Doctor Management)
- * 
+ *
  * Bảo vệ toàn cục:
  * 1. `JwtAuthGuard`: Xác minh JWT Access Token của người dùng.
  * 2. `RolesGuard`: Áp dụng phân quyền RBAC (Role-Based Access Control) trên từng api.
@@ -71,10 +71,7 @@ export class DoctorsController {
    */
   @Patch(':id')
   @Roles(Role.ADMIN)
-  update(
-    @Param('id') id: string,
-    @Body() updateDoctorDto: UpdateDoctorDto,
-  ) {
+  update(@Param('id') id: string, @Body() updateDoctorDto: UpdateDoctorDto) {
     return this.doctorsService.update(id, updateDoctorDto);
   }
   /**
@@ -87,7 +84,10 @@ export class DoctorsController {
     @Param('id') id: string,
     @Body() assignSpecialtyDto: AssignSpecialtyDto,
   ) {
-    return this.doctorsService.assignSpecialty(id, assignSpecialtyDto.specialtyId);
+    return this.doctorsService.assignSpecialty(
+      id,
+      assignSpecialtyDto.specialtyId,
+    );
   }
   /**
    * Vô hiệu hóa hoạt động của bác sĩ

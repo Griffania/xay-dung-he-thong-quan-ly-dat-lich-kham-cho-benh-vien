@@ -8,7 +8,8 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateWorkScheduleDto } from './dto/create-work-schedule.dto';
 import { UpdateWorkScheduleDto } from './dto/update-work-schedule.dto';
-import { Role, SlotStatus } from '@prisma/client';
+import { Role } from '../auth/enums/role.enum';
+import { SlotStatus } from '@prisma/client';
 
 @Injectable()
 export class WorkSchedulesService {
@@ -19,7 +20,9 @@ export class WorkSchedulesService {
   private parseDate(dateStr: string): Date {
     const date = new Date(`${dateStr}T00:00:00.000Z`);
     if (isNaN(date.getTime())) {
-      throw new BadRequestException('Ngày làm việc không hợp lệ! Định dạng yêu cầu là YYYY-MM-DD.');
+      throw new BadRequestException(
+        'Ngày làm việc không hợp lệ! Định dạng yêu cầu là YYYY-MM-DD.',
+      );
     }
     return date;
   }
@@ -33,7 +36,9 @@ export class WorkSchedulesService {
     }
     const date = new Date(`1970-01-01T${formattedTime}.000Z`);
     if (isNaN(date.getTime())) {
-      throw new BadRequestException('Giờ làm việc không đúng định dạng HH:mm hoặc HH:mm:ss!');
+      throw new BadRequestException(
+        'Giờ làm việc không đúng định dạng HH:mm hoặc HH:mm:ss!',
+      );
     }
     return date;
   }
@@ -41,7 +46,13 @@ export class WorkSchedulesService {
    * Tạo lịch làm việc mới cho Bác sĩ (chỉ ADMIN có quyền)
    */
   async create(createWorkScheduleDto: CreateWorkScheduleDto) {
-    const { doctorId, workDate: workDateStr, startTime: startTimeStr, endTime: endTimeStr, slotDurationMin = 15 } = createWorkScheduleDto;
+    const {
+      doctorId,
+      workDate: workDateStr,
+      startTime: startTimeStr,
+      endTime: endTimeStr,
+      slotDurationMin = 15,
+    } = createWorkScheduleDto;
     // 1. Kiểm tra sự tồn tại của Bác sĩ
     const doctor = await this.prisma.doctor.findUnique({
       where: { id: doctorId },
@@ -58,26 +69,29 @@ export class WorkSchedulesService {
     const endTimeMs = endTime.getTime();
     // 3. Validation phạm vi thời gian
     if (startTimeMs >= endTimeMs) {
-      throw new BadRequestException('Thời gian bắt đầu phải nhỏ hơn thời gian kết thúc!');
+      throw new BadRequestException(
+        'Thời gian bắt đầu phải nhỏ hơn thời gian kết thúc!',
+      );
     }
     const durationMs = endTimeMs - startTimeMs;
     const slotDurationMs = slotDurationMin * 60 * 1000;
     if (durationMs < slotDurationMs) {
-      throw new BadRequestException(`Tổng thời gian làm việc phải lớn hơn hoặc bằng thời lượng một slot khám (${slotDurationMin} phút)!`);
+      throw new BadRequestException(
+        `Tổng thời gian làm việc phải lớn hơn hoặc bằng thời lượng một slot khám (${slotDurationMin} phút)!`,
+      );
     }
     // 4. Kiểm tra trùng lặp lịch làm việc (Overlap validation)
     const existingOverlap = await this.prisma.workSchedule.findFirst({
       where: {
         doctorId,
         workDate,
-        AND: [
-          { startTime: { lt: endTime } },
-          { endTime: { gt: startTime } },
-        ],
+        AND: [{ startTime: { lt: endTime } }, { endTime: { gt: startTime } }],
       },
     });
     if (existingOverlap) {
-      throw new ConflictException('Bác sĩ đã có một ca làm việc khác trùng lặp thời gian trong ngày này!');
+      throw new ConflictException(
+        'Bác sĩ đã có một ca làm việc khác trùng lặp thời gian trong ngày này!',
+      );
     }
     // 5. Khởi chạy transaction tạo lịch trình và tự động chia nhỏ thành các Slot khám
     const result = await this.prisma.$transaction(async (tx) => {
@@ -93,7 +107,11 @@ export class WorkSchedulesService {
       });
       // 5b. Tính toán và tạo các Slot khám
       const slotsData: any[] = [];
-      for (let t = startTimeMs; t + slotDurationMs <= endTimeMs; t += slotDurationMs) {
+      for (
+        let t = startTimeMs;
+        t + slotDurationMs <= endTimeMs;
+        t += slotDurationMs
+      ) {
         slotsData.push({
           workScheduleId: schedule.id,
           doctorId,
@@ -118,7 +136,15 @@ export class WorkSchedulesService {
   /**
    * Truy vấn danh sách lịch làm việc có bộ lọc và phân trang
    */
-  async findAll(user: any, query: { doctorId?: string; workDate?: string; page?: string; limit?: string }) {
+  async findAll(
+    user: any,
+    query: {
+      doctorId?: string;
+      workDate?: string;
+      page?: string;
+      limit?: string;
+    },
+  ) {
     const page = parseInt(query.page || '1', 10);
     const limit = parseInt(query.limit || '10', 10);
     const skip = (page - 1) * limit;
@@ -131,11 +157,15 @@ export class WorkSchedulesService {
         where: { userId: user.userId },
       });
       if (!doctor) {
-        throw new NotFoundException('Không tìm thấy hồ sơ bác sĩ liên kết với tài khoản của bạn!');
+        throw new NotFoundException(
+          'Không tìm thấy hồ sơ bác sĩ liên kết với tài khoản của bạn!',
+        );
       }
 
       if (targetDoctorId && targetDoctorId !== doctor.id) {
-        throw new ForbiddenException('Bạn chỉ có quyền xem lịch trình của chính mình!');
+        throw new ForbiddenException(
+          'Bạn chỉ có quyền xem lịch trình của chính mình!',
+        );
       }
       targetDoctorId = doctor.id;
     }
@@ -228,7 +258,9 @@ export class WorkSchedulesService {
         where: { userId: user.userId },
       });
       if (!doctor || schedule.doctorId !== doctor.id) {
-        throw new ForbiddenException('Bạn chỉ có quyền xem lịch trình của chính mình!');
+        throw new ForbiddenException(
+          'Bạn chỉ có quyền xem lịch trình của chính mình!',
+        );
       }
     }
 
@@ -249,32 +281,42 @@ export class WorkSchedulesService {
     const bookedSlot = await this.prisma.slot.findFirst({
       where: {
         workScheduleId: id,
-        OR: [
-          { status: SlotStatus.BOOKED },
-          { appointment: { isNot: null } },
-        ],
+        OR: [{ status: SlotStatus.BOOKED }, { appointment: { isNot: null } }],
       },
     });
     if (bookedSlot) {
-      throw new ConflictException('Không thể cập nhật lịch làm việc này vì đã có bệnh nhân đặt hẹn khám!');
+      throw new ConflictException(
+        'Không thể cập nhật lịch làm việc này vì đã có bệnh nhân đặt hẹn khám!',
+      );
     }
     // 3. Chuẩn bị thông tin cập nhật (gộp với dữ liệu cũ nếu để trống)
     const doctorId = updateWorkScheduleDto.doctorId ?? schedule.doctorId;
-    const workDate = updateWorkScheduleDto.workDate ? this.parseDate(updateWorkScheduleDto.workDate) : schedule.workDate;
+    const workDate = updateWorkScheduleDto.workDate
+      ? this.parseDate(updateWorkScheduleDto.workDate)
+      : schedule.workDate;
     // Đảm bảo lấy đúng mốc giờ khi parse
-    const startTime = updateWorkScheduleDto.startTime ? this.parseTime(updateWorkScheduleDto.startTime) : schedule.startTime;
-    const endTime = updateWorkScheduleDto.endTime ? this.parseTime(updateWorkScheduleDto.endTime) : schedule.endTime;
-    const slotDurationMin = updateWorkScheduleDto.slotDurationMin ?? schedule.slotDurationMin;
+    const startTime = updateWorkScheduleDto.startTime
+      ? this.parseTime(updateWorkScheduleDto.startTime)
+      : schedule.startTime;
+    const endTime = updateWorkScheduleDto.endTime
+      ? this.parseTime(updateWorkScheduleDto.endTime)
+      : schedule.endTime;
+    const slotDurationMin =
+      updateWorkScheduleDto.slotDurationMin ?? schedule.slotDurationMin;
     const startTimeMs = startTime.getTime();
     const endTimeMs = endTime.getTime();
     // 4. Validate thời gian
     if (startTimeMs >= endTimeMs) {
-      throw new BadRequestException('Thời gian bắt đầu phải nhỏ hơn thời gian kết thúc!');
+      throw new BadRequestException(
+        'Thời gian bắt đầu phải nhỏ hơn thời gian kết thúc!',
+      );
     }
     const durationMs = endTimeMs - startTimeMs;
     const slotDurationMs = slotDurationMin * 60 * 1000;
     if (durationMs < slotDurationMs) {
-      throw new BadRequestException(`Tổng thời gian làm việc phải lớn hơn hoặc bằng thời lượng một slot khám (${slotDurationMin} phút)!`);
+      throw new BadRequestException(
+        `Tổng thời gian làm việc phải lớn hơn hoặc bằng thời lượng một slot khám (${slotDurationMin} phút)!`,
+      );
     }
     // 5. Kiểm tra trùng lặp lịch làm việc (loại trừ chính nó)
     const existingOverlap = await this.prisma.workSchedule.findFirst({
@@ -282,14 +324,13 @@ export class WorkSchedulesService {
         doctorId,
         workDate,
         id: { not: id },
-        AND: [
-          { startTime: { lt: startTime } },
-          { endTime: { gt: endTime } },
-        ],
+        AND: [{ startTime: { lt: startTime } }, { endTime: { gt: endTime } }],
       },
     });
     if (existingOverlap) {
-      throw new ConflictException('Lịch làm việc cập nhật bị trùng lặp thời gian với ca làm việc khác của bác sĩ!');
+      throw new ConflictException(
+        'Lịch làm việc cập nhật bị trùng lặp thời gian với ca làm việc khác của bác sĩ!',
+      );
     }
     // 6. Thực thi cập nhật trong Database Transaction
     await this.prisma.$transaction(async (tx) => {
@@ -310,7 +351,11 @@ export class WorkSchedulesService {
       });
       // 6c. Sinh lại danh sách slot khám mới
       const slotsData: any[] = [];
-      for (let t = startTimeMs; t + slotDurationMs <= endTimeMs; t += slotDurationMs) {
+      for (
+        let t = startTimeMs;
+        t + slotDurationMs <= endTimeMs;
+        t += slotDurationMs
+      ) {
         slotsData.push({
           workScheduleId: id,
           doctorId,
@@ -346,14 +391,13 @@ export class WorkSchedulesService {
     const bookedSlot = await this.prisma.slot.findFirst({
       where: {
         workScheduleId: id,
-        OR: [
-          { status: SlotStatus.BOOKED },
-          { appointment: { isNot: null } },
-        ],
+        OR: [{ status: SlotStatus.BOOKED }, { appointment: { isNot: null } }],
       },
     });
     if (bookedSlot) {
-      throw new ConflictException('Không thể xóa lịch làm việc này vì đã có bệnh nhân đặt hẹn khám!');
+      throw new ConflictException(
+        'Không thể xóa lịch làm việc này vì đã có bệnh nhân đặt hẹn khám!',
+      );
     }
     // 3. Tiến hành xóa (Prisma schema onDelete: Cascade sẽ tự động xóa các Slot tương ứng)
     await this.prisma.workSchedule.delete({
