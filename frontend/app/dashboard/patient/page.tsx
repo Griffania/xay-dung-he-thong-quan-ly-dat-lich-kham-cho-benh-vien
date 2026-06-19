@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import api from '../../../lib/api';
 import { 
   Calendar, 
   Clock, 
@@ -42,45 +43,110 @@ export default function PatientDashboard() {
     { id: 'MR-008', date: '12/03/2026', doctor: 'BS. Lê Mạnh Cường', diagnosis: 'Rối loạn nhịp tim nhẹ do stress', treatment: 'Hạn chế caffein, làm việc điều độ, ngủ đủ giấc', prescription: 'Magnesium B6 (30 viên) - Uống 2 viên chia 2 lần/ngày' },
   ];
 
+  // Trạng thái dữ liệu từ API
+  const [specialtiesList, setSpecialtiesList] = useState<{ id: string; name: string }[]>([]);
+  const [doctorsList, setDoctorsList] = useState<{ id: string; user: { fullName: string } }[]>([]);
+  const [slotsList, setSlotsList] = useState<{ id: string; startTime: string; endTime: string }[]>([]);
+
   // Trạng thái biểu mẫu đặt lịch khám
-  const [specialty, setSpecialty] = useState('');
-  const [doctor, setDoctor] = useState('');
-  const [date, setDate] = useState('');
-  const [slot, setSlot] = useState('');
+  const [selectedSpecialtyId, setSelectedSpecialtyId] = useState('');
+  const [selectedDoctorId, setSelectedDoctorId] = useState('');
+  const [selectedDate, setSelectedDate] = useState('');
+  const [selectedSlotId, setSelectedSlotId] = useState('');
   const [isBooking, setIsBooking] = useState(false);
   const [successBooking, setSuccessBooking] = useState<string | null>(null);
 
-  const specialties = ['Khoa Nội', 'Khoa Tim Mạch', 'Khoa Nhi', 'Khoa Tai Mũi Họng'];
-  const doctorsMap: { [key: string]: string[] } = {
-    'Khoa Nội': ['BS. Nguyễn Văn Hùng', 'BS. Nguyễn Thị Lan'],
-    'Khoa Tim Mạch': ['BS. Lê Mạnh Cường'],
-    'Khoa Nhi': ['BS. Phạm Minh Đức'],
-    'Khoa Tai Mũi Họng': ['BS. Hoàng Văn Bình'],
+  // Lấy danh sách chuyên khoa khi component mount
+  useEffect(() => {
+    const fetchSpecialties = async () => {
+      try {
+        const response = await api.get('/specialties?isActive=true&limit=100');
+        setSpecialtiesList(response.data.data || []);
+      } catch (err) {
+        console.error('Lỗi khi lấy danh sách chuyên khoa:', err);
+      }
+    };
+    fetchSpecialties();
+  }, []);
+
+  // Lấy danh sách bác sĩ thuộc chuyên khoa được chọn
+  useEffect(() => {
+    if (!selectedSpecialtyId) {
+      setDoctorsList([]);
+      setSelectedDoctorId('');
+      return;
+    }
+    const fetchDoctors = async () => {
+      try {
+        const response = await api.get(`/doctors?specialtyId=${selectedSpecialtyId}&isActive=true&limit=100`);
+        setDoctorsList(response.data.data || []);
+        setSelectedDoctorId('');
+      } catch (err) {
+        console.error('Lỗi khi lấy danh sách bác sĩ:', err);
+      }
+    };
+    fetchDoctors();
+  }, [selectedSpecialtyId]);
+
+  // Lấy danh sách khung giờ trống của bác sĩ theo ngày
+  useEffect(() => {
+    if (!selectedDoctorId || !selectedDate) {
+      setSlotsList([]);
+      setSelectedSlotId('');
+      return;
+    }
+    const fetchSlots = async () => {
+      try {
+        const response = await api.get(`/slots/available?doctorId=${selectedDoctorId}&date=${selectedDate}`);
+        setSlotsList(response.data || []);
+        setSelectedSlotId('');
+      } catch (err) {
+        console.error('Lỗi khi lấy danh sách slot khả dụng:', err);
+      }
+    };
+    fetchSlots();
+  }, [selectedDoctorId, selectedDate]);
+
+  // Helper định dạng giờ từ chuỗi ISO trả về từ Prisma (mốc 1970-01-01 UTC)
+  const formatSlotTime = (isoTimeStr: string) => {
+    const dateObj = new Date(isoTimeStr);
+    const hours = String(dateObj.getUTCHours()).padStart(2, '0');
+    const minutes = String(dateObj.getUTCMinutes()).padStart(2, '0');
+    return `${hours}:${minutes}`;
+  };
+
+  const displayTimeRange = (start: string, end: string) => {
+    return `${formatSlotTime(start)} - ${formatSlotTime(end)}`;
   };
 
   const handleBook = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!specialty || !doctor || !date || !slot) return;
+    if (!selectedSpecialtyId || !selectedDoctorId || !selectedDate || !selectedSlotId) return;
 
     setIsBooking(true);
     setTimeout(() => {
+      const docName = doctorsList.find(d => d.id === selectedDoctorId)?.user.fullName || 'Bác sĩ';
+      const specName = specialtiesList.find(s => s.id === selectedSpecialtyId)?.name || 'Chuyên khoa';
+      const chosenSlot = slotsList.find(s => s.id === selectedSlotId);
+      const slotTimeStr = chosenSlot ? displayTimeRange(chosenSlot.startTime, chosenSlot.endTime) : '';
+
       const newAppt: Appointment = {
         id: `A-${Math.floor(Math.random() * 800) + 100}`,
-        doctorName: doctor,
-        specialty: specialty,
-        date: date.split('-').reverse().join('/'), // Convert YYYY-MM-DD to DD/MM/YYYY
-        time: slot,
+        doctorName: docName,
+        specialty: specName,
+        date: selectedDate.split('-').reverse().join('/'), // Convert YYYY-MM-DD to DD/MM/YYYY
+        time: slotTimeStr,
         status: 'PENDING'
       };
 
       setAppointments(prev => [newAppt, ...prev]);
-      setSuccessBooking(`Đăng ký đặt lịch khám thành công với ${doctor} lúc ${slot} ngày ${newAppt.date}. Vui lòng chờ xác nhận.`);
+      setSuccessBooking(`Đăng ký đặt lịch khám thành công với ${docName} lúc ${slotTimeStr} ngày ${newAppt.date}. Vui lòng chờ xác nhận.`);
       
       // Reset form
-      setSpecialty('');
-      setDoctor('');
-      setDate('');
-      setSlot('');
+      setSelectedSpecialtyId('');
+      setSelectedDoctorId('');
+      setSelectedDate('');
+      setSelectedSlotId('');
       setIsBooking(false);
     }, 800);
   };
@@ -152,16 +218,13 @@ export default function PatientDashboard() {
                 <label className="text-xs font-semibold text-slate-350 block">Chọn chuyên khoa khám</label>
                 <select
                   required
-                  value={specialty}
-                  onChange={(e) => {
-                    setSpecialty(e.target.value);
-                    setDoctor('');
-                  }}
+                  value={selectedSpecialtyId}
+                  onChange={(e) => setSelectedSpecialtyId(e.target.value)}
                   className="w-full px-3 py-2.5 bg-slate-950/40 border border-slate-800 focus:border-indigo-500 rounded-xl text-white outline-none transition-all text-xs"
                 >
                   <option value="" disabled className="bg-slate-950">-- Chọn chuyên khoa --</option>
-                  {specialties.map(s => (
-                    <option key={s} value={s} className="bg-slate-950 text-slate-300">{s}</option>
+                  {specialtiesList.map(s => (
+                    <option key={s.id} value={s.id} className="bg-slate-950 text-slate-300">{s.name}</option>
                   ))}
                 </select>
               </div>
@@ -171,14 +234,14 @@ export default function PatientDashboard() {
                 <label className="text-xs font-semibold text-slate-350 block">Bác sĩ phụ trách</label>
                 <select
                   required
-                  disabled={!specialty}
-                  value={doctor}
-                  onChange={(e) => setDoctor(e.target.value)}
+                  disabled={!selectedSpecialtyId}
+                  value={selectedDoctorId}
+                  onChange={(e) => setSelectedDoctorId(e.target.value)}
                   className="w-full px-3 py-2.5 bg-slate-950/40 border border-slate-800 focus:border-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl text-white outline-none transition-all text-xs"
                 >
                   <option value="" disabled className="bg-slate-950">-- Chọn bác sĩ --</option>
-                  {specialty && doctorsMap[specialty]?.map(d => (
-                    <option key={d} value={d} className="bg-slate-950 text-slate-300">{d}</option>
+                  {doctorsList.map(d => (
+                    <option key={d.id} value={d.id} className="bg-slate-950 text-slate-300">{d.user.fullName}</option>
                   ))}
                 </select>
               </div>
@@ -189,9 +252,9 @@ export default function PatientDashboard() {
                 <input
                   type="date"
                   required
-                  value={date}
-                  min="2026-06-04"
-                  onChange={(e) => setDate(e.target.value)}
+                  value={selectedDate}
+                  min={new Date().toISOString().split('T')[0]}
+                  onChange={(e) => setSelectedDate(e.target.value)}
                   className="w-full px-3 py-2.5 bg-slate-950/40 border border-slate-800 focus:border-indigo-500 rounded-xl text-white outline-none transition-all text-xs"
                 />
               </div>
@@ -201,16 +264,22 @@ export default function PatientDashboard() {
                 <label className="text-xs font-semibold text-slate-350 block">Chọn khung giờ khám</label>
                 <select
                   required
-                  value={slot}
-                  onChange={(e) => setSlot(e.target.value)}
-                  className="w-full px-3 py-2.5 bg-slate-950/40 border border-slate-800 focus:border-indigo-500 rounded-xl text-white outline-none transition-all text-xs"
+                  disabled={!selectedDate || !selectedDoctorId}
+                  value={selectedSlotId}
+                  onChange={(e) => setSelectedSlotId(e.target.value)}
+                  className="w-full px-3 py-2.5 bg-slate-950/40 border border-slate-800 focus:border-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl text-white outline-none transition-all text-xs"
                 >
                   <option value="" disabled className="bg-slate-950">-- Chọn giờ --</option>
-                  <option value="08:00 - 08:30" className="bg-slate-950 text-slate-300">08:00 - 08:30 (Sáng)</option>
-                  <option value="09:00 - 09:30" className="bg-slate-950 text-slate-300">09:00 - 09:30 (Sáng)</option>
-                  <option value="10:00 - 10:30" className="bg-slate-950 text-slate-300">10:00 - 10:30 (Sáng)</option>
-                  <option value="14:00 - 14:30" className="bg-slate-950 text-slate-300">14:00 - 14:30 (Chiều)</option>
-                  <option value="15:00 - 15:30" className="bg-slate-950 text-slate-300">15:00 - 15:30 (Chiều)</option>
+                  {slotsList.map(s => (
+                    <option key={s.id} value={s.id} className="bg-slate-950 text-slate-300">
+                      {displayTimeRange(s.startTime, s.endTime)}
+                    </option>
+                  ))}
+                  {selectedDate && selectedDoctorId && slotsList.length === 0 && (
+                    <option value="" disabled className="bg-slate-950 text-amber-400">
+                      Không có ca khám khả dụng
+                    </option>
+                  )}
                 </select>
               </div>
 
