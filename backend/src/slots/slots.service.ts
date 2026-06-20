@@ -142,7 +142,7 @@ export class SlotsService {
 
     // Tính toán thời gian còn lại (phút)
     const remainingMs = slotEndTimeMs - completedTimeMs;
-    const remainingMin = remainingMs / (60 * 1000);
+    const remainingMin = remainingMs / (60 * 1000);// Đổi từ miligiây sang phút
 
     if (remainingMin < minRemainingMin) {
       return {
@@ -157,10 +157,10 @@ export class SlotsService {
         workScheduleId: slot.workScheduleId,
         doctorId: slot.doctorId,
         date: slot.date,
-        startTime: completedTimeOfDay,
-        endTime: slot.endTime,
-        status: SlotStatus.AVAILABLE,
-        parentSlotId: slot.id,
+        startTime: completedTimeOfDay,// Bắt đầu ngay từ lúc bác sĩ vừa khám xong ca trước
+        endTime: slot.endTime,// Kết thúc tại đúng giờ kết thúc ban đầu của ca trước
+        status: SlotStatus.AVAILABLE,// Trạng thái Trống để người khác đặt
+        parentSlotId: slot.id,// Lưu lại ID của slot cha để sau này biết slot này do đâu mà ra
       },
     });
 

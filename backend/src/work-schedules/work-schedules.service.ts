@@ -89,8 +89,17 @@ export class WorkSchedulesService {
       },
     });
     if (existingOverlap) {
+      const isDuplicate =
+        existingOverlap.startTime.getTime() === startTime.getTime() &&
+        existingOverlap.endTime.getTime() === endTime.getTime();
+
+      if (isDuplicate) {
+        throw new ConflictException(
+          'Bác sĩ đã có lịch làm việc trùng khớp hoàn toàn thời gian bắt đầu và kết thúc trong ngày này!',
+        );
+      }
       throw new ConflictException(
-        'Bác sĩ đã có một ca làm việc khác trùng lặp thời gian trong ngày này!',
+        'Bác sĩ đã có một ca làm việc khác trùng lặp thời gian (Schedule Collision) trong ngày này!',
       );
     }
     // 5. Khởi chạy transaction tạo lịch trình và tự động chia nhỏ thành các Slot khám
@@ -324,10 +333,19 @@ export class WorkSchedulesService {
         doctorId,
         workDate,
         id: { not: id },
-        AND: [{ startTime: { lt: startTime } }, { endTime: { gt: endTime } }],
+        AND: [{ startTime: { lt: endTime } }, { endTime: { gt: startTime } }],
       },
     });
     if (existingOverlap) {
+      const isDuplicate =
+        existingOverlap.startTime.getTime() === startTime.getTime() &&
+        existingOverlap.endTime.getTime() === endTime.getTime();
+
+      if (isDuplicate) {
+        throw new ConflictException(
+          'Bác sĩ đã có lịch làm việc trùng khớp hoàn toàn thời gian bắt đầu và kết thúc trong ngày này!',
+        );
+      }
       throw new ConflictException(
         'Lịch làm việc cập nhật bị trùng lặp thời gian với ca làm việc khác của bác sĩ!',
       );
