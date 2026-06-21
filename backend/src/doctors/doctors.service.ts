@@ -2,11 +2,13 @@ import {
   Injectable,
   ConflictException,
   NotFoundException,
+  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateDoctorDto } from './dto/create-doctor.dto';
 import { UpdateDoctorDto } from './dto/update-doctor.dto';
-import { Role, UserStatus } from '@prisma/client';
+import { Role } from '../auth/enums/role.enum';
+import { UserStatus,SlotStatus } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
@@ -28,6 +30,9 @@ export class DoctorsService {
   private sanitizeUser(user: any) {
     if (!user) return null;
     const { passwordHash, refreshTokenHash, ...sanitized } = user;
+    if (sanitized.role && typeof sanitized.role === 'object') {
+      sanitized.role = sanitized.role.code;
+    }
     return sanitized;
   }
   /**
@@ -76,7 +81,7 @@ export class DoctorsService {
           fullName,
           phone,
           birthDate: birthDate ? new Date(birthDate) : null,
-          role: Role.DOCTOR, // Thiết lập vai trò bắt buộc là DOCTOR
+          role: { connect: { code: 'DOCTOR' } },
           status: UserStatus.ACTIVE,
         },
       });
@@ -166,7 +171,9 @@ export class DoctorsService {
       this.prisma.doctor.findMany({
         where,
         include: {
-          user: true, // Kèm thông tin tài khoản cơ bản
+          user: {
+            include: { role: true },
+          }, // Kèm thông tin tài khoản cơ bản có role
           specialty: true, // Kèm thông tin chuyên khoa
         },
         skip,
@@ -211,7 +218,9 @@ export class DoctorsService {
     const doctor = await this.prisma.doctor.findUnique({
       where: { id },
       include: {
-        user: true,
+        user: {
+          include: { role: true },
+        },
         specialty: true,
       },
     });
@@ -256,7 +265,9 @@ export class DoctorsService {
         where: { id: updateDoctorDto.specialtyId },
       });
       if (!specialty) {
-        throw new NotFoundException('Không tìm thấy chuyên khoa mới được chỉ định!');
+        throw new NotFoundException(
+          'Không tìm thấy chuyên khoa mới được chỉ định!',
+        );
       }
     }
 
@@ -266,7 +277,11 @@ export class DoctorsService {
     // 3. Tiến hành cập nhật bằng Transaction
     await this.prisma.$transaction(async (tx) => {
       // Cập nhật thông tin cá nhân
-      if (fullName !== undefined || phone !== undefined || birthDate !== undefined) {
+      if (
+        fullName !== undefined ||
+        phone !== undefined ||
+        birthDate !== undefined
+      ) {
         await tx.user.update({
           where: { id: doctor.userId },
           data: {
@@ -278,7 +293,11 @@ export class DoctorsService {
       }
 
       // Cập nhật thông tin chuyên môn của bác sĩ
-      if (specialtyId !== undefined || licenseNo !== undefined || bio !== undefined) {
+      if (
+        specialtyId !== undefined ||
+        licenseNo !== undefined ||
+        bio !== undefined
+      ) {
         await tx.doctor.update({
           where: { id },
           data: {
@@ -321,7 +340,9 @@ export class DoctorsService {
       where: { id },
       data: { specialtyId },
       include: {
-        user: true,
+        user: {
+          include: { role: true },
+        },
         specialty: true,
       },
     });
@@ -356,7 +377,9 @@ export class DoctorsService {
       where: { id },
       data: { isActive: false },
       include: {
-        user: true,
+        user: {
+          include: { role: true },
+        },
         specialty: true,
       },
     });
@@ -390,7 +413,9 @@ export class DoctorsService {
       where: { id },
       data: { isActive: true },
       include: {
-        user: true,
+        user: {
+          include: { role: true },
+        },
         specialty: true,
       },
     });
@@ -407,5 +432,102 @@ export class DoctorsService {
         },
       },
     };
+  }
+  /**
+   * Lấy danh sách lịch làm việc của một bác sĩ cụ thể (Dành cho bệnh nhân xem/đặt lịch)
+   * @param doctorId ID của hồ sơ bác sĩ (dạng UUID)
+   * @param user Đối tượng người dùng đang đăng nhập
+   * @param query Bộ lọc ngày làm việc và phân trang
+   */
+  async findDoctorSchedules(
+    doctorId: string,
+    user: any,
+    query: {workDate?:string;page?:string;limit?:string},
+  ){
+    const doctor = await this.prisma.doctor.findUnique({
+      where : {id:doctorId},
+    });
+    if(!doctor){
+      throw new NotFoundException('Không tìm thấy hồ sơ bác sĩ yêu cầu!');
+    }
+    const page = parseInt(query.page||'1',10);
+    const limit = parseInt(query.limit||'10',10);
+    const skip = (page-1)*limit;
+    const where:any = {doctorId};
+    //bệnh nhân lọc lịch làm việc của bác sĩ theo ngày
+    if(query.workDate){
+      const parsedDate = new Date(`${query.workDate}T00:00:00.000Z`);
+      if(isNaN(parsedDate.getTime())){
+        throw new NotFoundException('ngày lọc không đún dạng yyyy-mm-dd!');
+      }
+      where.workDate=parsedDate;
+    }
+    //truy vấn lịch làm việc kèm theo các slot khám chi tiết của lịch trình đó 
+    const [schedules,total]=await Promise.all([
+      this.prisma.workSchedule.findMany({
+        where,
+        include:{
+          slots:{
+            orderBy:{startTime:'asc'}//sắp xếp thời gian bắt đầu của các slot tăng dần
+          },
+        },
+        skip,
+        take:limit,
+        orderBy:[{workDate:'desc'},{startTime:'asc'}]//sắp xếp ngày làm việc mới nhất lên trên đầu trang
+      }),
+      this.prisma.workSchedule.count({where}),
+    ]);
+    return {
+      data:schedules,
+      meta:{
+        total,
+        page,
+        limit,
+        totalPages:Math.ceil(total/limit),
+      },
+    };  
+  }
+  /**
+   * Lấy danh sách các khung giờ khám còn trống (AVAILABLE) của bác sĩ theo ngày cụ thể
+   * @param doctorId ID của hồ sơ bác sĩ
+   * @param dateStr Ngày cần tra cứu dạng YYYY-MM-DD
+   */
+  async findAvailableSlots(doctorId:string,dateStr:string){
+    const doctor = await this.prisma.doctor.findUnique({
+      where : {id:doctorId},
+    });
+    if(!doctor){
+      throw new NotFoundException('không tìm thấy hồ sơ bác sĩ yêu cầu!');
+    }
+    //ép kiểu dạng chuổi sang Date trong múi giờ UTC
+    const parsedDate = new Date(`${dateStr}T00:00:00.000Z`);
+    if(isNaN(parsedDate.getTime())){
+      throw new NotFoundException('ngày truy vấn không hợp lệ');
+    }
+    const whereClause:any={
+      doctorId,
+      date: parsedDate,
+      status:SlotStatus.AVAILABLE//chỉ lấy khung giờ còn trống
+    };
+    //nếu slot chọn là ngày hôm nay , chỉ lấy các slot có giờ bắt đầu lớn hơn hiện tại
+    const todayStr = new Date().toISOString().split('T')[0];
+    if(dateStr===todayStr){
+      const now = new Date();
+      const hours  = String(now.getUTCHours()).padStart(2,'0');
+      const minuted = String(now.getUTCMinutes()).padStart(2,'0');
+      const seconds = String(now.getMilliseconds()).padStart(2,'0');
+      //so sánh theo giờ trong ngày 1970-01-01 UTC của prisma
+      const currentTimeOFDay = new Date(
+        `1970-01-01T${hours}:${minuted}:${seconds}.000Z`,
+      );
+      whereClause.startTime = {
+        gt: currentTimeOFDay, //lớn hơn giờ hiện tại
+      }
+    }
+    //lấy danh sách slot và sấp xếp theo thời gian bắt đầu tăng dần
+    return this.prisma.slot.findMany({
+      where:whereClause,
+      orderBy:{startTime:'asc'}
+    });
   }
 }

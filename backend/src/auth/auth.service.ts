@@ -10,6 +10,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { connect } from 'http2';
 
 @Injectable()
 export class AuthService {
@@ -50,6 +51,7 @@ export class AuthService {
         fullName,
         phone,
         birthDate: birthDate ? new Date(birthDate) : null,
+        role: { connect: { code: 'PATIENT' } },
       },
     });
     return {
@@ -60,7 +62,7 @@ export class AuthService {
 
   // Sinh bộ đôi token (AT và RT): Ký số (sign) thông tin người dùng (payload) với khóa tương ứng.
   async generateTokens(payload: { sub: string; email: string; role: string }) {
-     // Tạo Access Token
+    // Tạo Access Token
     const accessSecret =
       this.configService.get<string>('JWT_ACCESS_SECRET') ||
       'default_access_secret_123';
@@ -101,6 +103,7 @@ export class AuthService {
     // Lấy thông tin user dựa theo email
     const user = await this.prisma.user.findUnique({
       where: { email },
+      include: { role: true },
     });
     if (!user) {
       throw new UnauthorizedException(
@@ -125,14 +128,14 @@ export class AuthService {
     const tokens = await this.generateTokens({
       sub: user.id,
       email: user.email,
-      role: user.role,
+      role: user.role.code,
     });
     return {
       user: {
         id: user.id,
         email: user.email,
         fullName: user.fullName,
-        role: user.role,
+        role: user.role.code,
       },
       ...tokens,
     };
@@ -154,6 +157,7 @@ export class AuthService {
     }
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
+      include: { role: true },
     });
     if (!user || !user.refreshTokenHash) {
       throw new UnauthorizedException('Quyền truy cập bị từ chối!');
@@ -172,7 +176,7 @@ export class AuthService {
     const tokens = await this.generateTokens({
       sub: user.id,
       email: user.email,
-      role: user.role,
+      role: user.role.code,
     });
     return tokens;
   }

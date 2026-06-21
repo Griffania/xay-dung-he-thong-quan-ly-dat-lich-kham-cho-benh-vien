@@ -17,7 +17,10 @@ export class UpdateWorkScheduleDto {
   @IsOptional()
   doctorId?: string;
 
-  @IsDateString({}, { message: 'Ngày làm việc không đúng định dạng ISO (YYYY-MM-DD)!' })
+  @IsDateString(
+    {},
+    { message: 'Ngày làm việc không đúng định dạng ISO (YYYY-MM-DD)!' },
+  )
   @IsOptional()
   workDate?: string;
 

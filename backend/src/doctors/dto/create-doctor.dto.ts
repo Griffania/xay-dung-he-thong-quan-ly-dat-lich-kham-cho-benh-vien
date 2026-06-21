@@ -32,7 +32,10 @@ export class CreateDoctorDto {
   @IsOptional()
   phone?: string;
 
-  @IsDateString({}, { message: 'Ngày sinh không đúng định dạng ISO (YYYY-MM-DD)!' })
+  @IsDateString(
+    {},
+    { message: 'Ngày sinh không đúng định dạng ISO (YYYY-MM-DD)!' },
+  )
   @IsOptional()
   birthDate?: string;
   // --- Thông tin chuyên môn bác sĩ (Doctor Profile) ---

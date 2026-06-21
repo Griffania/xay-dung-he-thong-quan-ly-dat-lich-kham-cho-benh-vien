@@ -7,12 +7,19 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/// Vai trò người dùng trong hệ thống
-enum Role {
-  PATIENT      // Bệnh nhân - người đặt lịch hẹn và xem bệnh án
-  DOCTOR       // Bác sĩ - người khám bệnh, quản lý lịch và lên bệnh án
-  RECEPTIONIST // Lễ tân - người xác nhận lịch, check-in và điều phối hàng đợi
-  ADMIN        // Quản trị viên - người quản lý hệ thống, danh mục chuyên khoa
+//bảng quản lý role mới cho luận văn
+model Role {
+  id          String    @id @default(uuid())  @db.Uuid
+  code        String    @unique @db.VarChar(50)// E.g.,"PATIENT","DOCTOR","RECEPTIONIST","ADMIN"
+  name        String    @db.VarChar(100)//E.g.,"Bệnh nhân","Bác sĩ",...
+  description String?   @db.Text
+  createdAt  DateTime   @default(now()) @map("created_at")
+  updatedAt  DateTime   @updatedAt  @map("updated_at")
+
+  users      User[]
+  audit_logs AuditLog[]
+
+  @@map("roles")
 }
 
 /// Trạng thái tài khoản người dùng
@@ -55,7 +62,8 @@ model User {
   fullName         String     @map("full_name") @db.VarChar(100)     // Họ và tên đầy đủ
   phone            String?    @db.VarChar(20)                        // Số điện thoại (có thể để trống)
   birthDate        DateTime?  @map("birth_date") @db.Date            // Ngày tháng năm sinh (chỉ lưu ngày, không lưu giờ)
-  role             Role       @default(PATIENT)                      // Vai trò trong hệ thống, mặc định là PATIENT
+  roleId           String     @map("role_id") @db.Uuid
+  role             Role       @relation(fields:[roleId],references:[id])
   status           UserStatus @default(ACTIVE)                       // Trạng thái tài khoản, mặc định là ACTIVE
   refreshTokenHash String?    @map("refresh_token_hash") @db.VarChar(255) // Mã băm Refresh Token dùng để duy trì phiên đăng nhập mà không cần gõ lại mật khẩu
   createdAt        DateTime   @default(now()) @map("created_at")     // Thời gian tạo tài khoản (mặc định là thời gian hiện tại)
@@ -224,7 +232,8 @@ model MedicalRecord {
 model AuditLog {
   id             String   @id @default(uuid()) @db.Uuid      // Khóa chính nhật ký hệ thống
   actorId        String   @map("actor_id") @db.Uuid          // ID của người thực hiện hành động (User ID)
-  actorRole      Role     @map("actor_role")                 // Vai trò của người thực hiện lúc đó (Để tra cứu nhanh quyền hạn)
+  actorRoleId    String?  @map("actor_role_id") @db.Uuid
+  actorRole      Role?    @relation(fields:[actorRoleId],references:[id])
   action         String   @db.VarChar(100)                   // Tên hành động cụ thể (Ví dụ: "UPDATE_STATUS", "DELETE_USER")
   targetResource String   @map("target_resource") @db.VarChar(50) // Tên bảng/Thực thể bị tác động (Ví dụ: "Appointment", "User")
   targetId       String   @map("target_id") @db.Uuid         // ID chính xác của bản ghi bị tác động trong bảng đó

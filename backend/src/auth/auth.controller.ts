@@ -28,7 +28,7 @@ export class AuthController {
     );
   }
 
-  @UseGuards(JwtAuthGuard)// Bảo vệ endpoint này bằng JwtAuthGuard, yêu cầu Access Token hợp lệ trong Header
+  @UseGuards(JwtAuthGuard) // Bảo vệ endpoint này bằng JwtAuthGuard, yêu cầu Access Token hợp lệ trong Header
   @Post('logout')
   logout(@Req() req: { user: { userId: string } }) {
     return this.authService.logout(req.user.userId);

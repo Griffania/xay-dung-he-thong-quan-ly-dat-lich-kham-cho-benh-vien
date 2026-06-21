@@ -5,7 +5,8 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
-import { Role, UserStatus } from '@prisma/client';
+import { UserStatus } from '@prisma/client';
+import { Role } from '../auth/enums/role.enum';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
@@ -18,6 +19,9 @@ export class UsersService {
   // Loại bỏ passwordHash khỏi kết quả trả về
   private sanitizeUser(user: any) {
     const { passwordHash, refreshTokenHash, ...sanitized } = user;
+    if (sanitized.role && typeof sanitized.role === 'object') {
+      sanitized.role = sanitized.role.code;
+    }
     return sanitized;
   }
   async create(createUserDto: CreateUserDto) {
@@ -39,9 +43,10 @@ export class UsersService {
         fullName,
         phone,
         birthDate: birthDate ? new Date(birthDate) : null,
-        role: role || Role.PATIENT,
+        role: { connect: { code: role || 'PATIENT' } },
         status: UserStatus.ACTIVE,
       },
+      include: { role: true },
     });
     return {
       message: 'Tạo tài khoản thành công',
@@ -67,11 +72,12 @@ export class UsersService {
       ];
     }
     if (query.role) {
-      where.role = query.role;
+      where.role = { code: query.role };
     }
     const [users, total] = await Promise.all([
       this.prisma.user.findMany({
         where,
+        include: { role: true },
         skip,
         take: limit,
         orderBy: { createdAt: 'desc' },
@@ -91,6 +97,7 @@ export class UsersService {
   async findOne(id: string) {
     const user = await this.prisma.user.findUnique({
       where: { id },
+      include: { role: true },
     });
 
     if (!user) {
@@ -112,6 +119,7 @@ export class UsersService {
         status: UserStatus.LOCKED,
         refreshTokenHash: null, // Xóa token hiện tại để buộc đăng xuất
       },
+      include: { role: true },
     });
     return {
       message: 'Khóa tài khoản thành công',
@@ -130,6 +138,7 @@ export class UsersService {
       data: {
         status: UserStatus.ACTIVE,
       },
+      include: { role: true },
     });
     return {
       message: 'Mở khóa tài khoản thành công',

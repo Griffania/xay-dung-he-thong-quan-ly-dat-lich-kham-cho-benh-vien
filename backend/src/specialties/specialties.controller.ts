@@ -14,10 +14,10 @@ import { UpdateSpecialtyDto } from './dto/update-specialty.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { Role } from '@prisma/client';
+import { Role } from '../auth/enums/role.enum';
 /**
  * Controller Quản lý Danh mục Chuyên khoa (Specialties Management)
- * 
+ *
  * Bảo vệ toàn cục:
  * 1. `JwtAuthGuard`: Xác minh JWT Access Token
  * 2. `RolesGuard`: Ràng buộc phân quyền dựa trên vai trò của người dùng

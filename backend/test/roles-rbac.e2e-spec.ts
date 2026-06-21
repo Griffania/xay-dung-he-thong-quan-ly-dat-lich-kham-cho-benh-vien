@@ -1,11 +1,15 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, HttpStatus, ForbiddenException } from '@nestjs/common';
+import {
+  INestApplication,
+  HttpStatus,
+  ForbiddenException,
+} from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { PrismaService } from './../src/prisma/prisma.service';
 import { JwtService } from '@nestjs/jwt';
-import { Role } from '@prisma/client';
+import { Role } from './../src/auth/enums/role.enum';
 import { HttpAdapterHost } from '@nestjs/core';
 import { AllExceptionsFilter } from './../src/common/filters/all-exceptions.filter';
 import { ConfigService } from '@nestjs/config';
@@ -20,8 +24,20 @@ describe('Roles-Based Access Control (RBAC) (e2e)', () => {
   const mockPrismaService = {
     user: {
       findMany: jest.fn().mockResolvedValue([
-        { id: '1', email: 'user1@example.com', fullName: 'User One', role: Role.PATIENT, status: 'ACTIVE' },
-        { id: '2', email: 'user2@example.com', fullName: 'User Two', role: Role.DOCTOR, status: 'ACTIVE' },
+        {
+          id: '1',
+          email: 'user1@example.com',
+          fullName: 'User One',
+          role: Role.PATIENT,
+          status: 'ACTIVE',
+        },
+        {
+          id: '2',
+          email: 'user2@example.com',
+          fullName: 'User Two',
+          role: Role.DOCTOR,
+          status: 'ACTIVE',
+        },
       ]),
       count: jest.fn().mockResolvedValue(2),
       findUnique: jest.fn().mockImplementation(({ where }) => {
@@ -67,7 +83,7 @@ describe('Roles-Based Access Control (RBAC) (e2e)', () => {
       .compile();
 
     app = moduleFixture.createNestApplication();
-    
+
     // Đăng ký Exception Filter và Global Prefix tương tự như production ở main.ts
     const httpAdapterHost = app.get(HttpAdapterHost);
     app.useGlobalFilters(new AllExceptionsFilter(httpAdapterHost));
@@ -75,7 +91,9 @@ describe('Roles-Based Access Control (RBAC) (e2e)', () => {
 
     jwtService = app.get<JwtService>(JwtService);
     configService = app.get<ConfigService>(ConfigService);
-    jwtSecret = configService.get<string>('JWT_ACCESS_SECRET') || 'default_access_secret_123';
+    jwtSecret =
+      configService.get<string>('JWT_ACCESS_SECRET') ||
+      'default_access_secret_123';
 
     await app.init();
   });
@@ -85,7 +103,11 @@ describe('Roles-Based Access Control (RBAC) (e2e)', () => {
   });
 
   // Hàm tiện ích để tạo nhanh JWT token cho mục đích test phân quyền
-  const generateTokenForRole = (role: Role, email = 'user@example.com', userId = 'test-uuid-123') => {
+  const generateTokenForRole = (
+    role: Role,
+    email = 'user@example.com',
+    userId = 'test-uuid-123',
+  ) => {
     const payload = {
       sub: userId,
       email: email,
@@ -112,14 +134,19 @@ describe('Roles-Based Access Control (RBAC) (e2e)', () => {
     });
 
     it('3. Trả về 403 Forbidden đối với PATIENT (Không đủ quyền hạn)', async () => {
-      const patientToken = generateTokenForRole(Role.PATIENT, 'patient@test.com');
-      
+      const patientToken = generateTokenForRole(
+        Role.PATIENT,
+        'patient@test.com',
+      );
+
       const response = await request(app.getHttpServer())
         .get('/api/users')
         .set('Authorization', `Bearer ${patientToken}`)
         .expect(HttpStatus.FORBIDDEN);
 
-      expect(response.body.message).toBe('Bạn không có quyền truy cập vào tài nguyên này!');
+      expect(response.body.message).toBe(
+        'Bạn không có quyền truy cập vào tài nguyên này!',
+      );
       expect(response.body.statusCode).toBe(HttpStatus.FORBIDDEN);
     });
 
@@ -166,7 +193,9 @@ describe('Roles-Based Access Control (RBAC) (e2e)', () => {
         .send(newUserDto)
         .expect(HttpStatus.FORBIDDEN);
 
-      expect(response.body.message).toBe('Bạn không có quyền truy cập vào tài nguyên này!');
+      expect(response.body.message).toBe(
+        'Bạn không có quyền truy cập vào tài nguyên này!',
+      );
     });
 
     it('2. Trả về 201 Created đối với ADMIN (Đủ quyền tạo)', async () => {
@@ -186,14 +215,19 @@ describe('Roles-Based Access Control (RBAC) (e2e)', () => {
 
   describe('Route: POST /api/users/:id/lock (Yêu cầu: ADMIN)', () => {
     it('1. Trả về 403 Forbidden đối với RECEPTIONIST (Không được quyền khóa tài khoản)', async () => {
-      const receptionistToken = generateTokenForRole(Role.RECEPTIONIST, 'receptionist@test.com');
+      const receptionistToken = generateTokenForRole(
+        Role.RECEPTIONIST,
+        'receptionist@test.com',
+      );
 
       const response = await request(app.getHttpServer())
         .post('/api/users/some-uuid/lock')
         .set('Authorization', `Bearer ${receptionistToken}`)
         .expect(HttpStatus.FORBIDDEN);
 
-      expect(response.body.message).toBe('Bạn không có quyền truy cập vào tài nguyên này!');
+      expect(response.body.message).toBe(
+        'Bạn không có quyền truy cập vào tài nguyên này!',
+      );
     });
 
     it('2. Trả về 201 Created/200 OK đối với ADMIN (Khóa tài khoản thành công)', async () => {

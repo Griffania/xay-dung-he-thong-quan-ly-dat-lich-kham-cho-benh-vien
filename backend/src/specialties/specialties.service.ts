@@ -21,7 +21,9 @@ export class SpecialtiesService {
       where: { name },
     });
     if (existingSpecialty) {
-      throw new ConflictException('Tên chuyên khoa này đã tồn tại trên hệ thống!');
+      throw new ConflictException(
+        'Tên chuyên khoa này đã tồn tại trên hệ thống!',
+      );
     }
     // Tiến hành tạo mới
     const specialty = await this.prisma.specialty.create({
@@ -121,7 +123,9 @@ export class SpecialtiesService {
         where: { name: updateSpecialtyDto.name },
       });
       if (existingSpecialty) {
-        throw new ConflictException('Tên chuyên khoa mới đã tồn tại trên hệ thống!');
+        throw new ConflictException(
+          'Tên chuyên khoa mới đã tồn tại trên hệ thống!',
+        );
       }
     }
 
