@@ -7,6 +7,7 @@ import {
   Patch,
   Query,
   UseGuards,
+  Req,
 } from '@nestjs/common';
 import { DoctorsService } from './doctors.service';
 import { CreateDoctorDto } from './dto/create-doctor.dto';
@@ -16,6 +17,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../auth/enums/role.enum';
+import { query } from 'winston';
 
 /**
  * Controller Quản lý Bác sĩ (Doctor Management)
@@ -106,5 +108,34 @@ export class DoctorsController {
   @Roles(Role.ADMIN)
   enable(@Param('id') id: string) {
     return this.doctorsService.enable(id);
+  }
+  /**
+   * API lấy lịch làm việc của một bác sĩ cụ thể
+   * Endpoint: GET /doctors/:id/schedules
+   * Quyền truy cập: Mọi tài khoản đã đăng nhập (Patient, Doctor, Receptionist, Admin)
+   */
+  @Get(':id/chedules')
+  getDoctorSchedules(
+    @Param('id') id: string,
+    @Req() req: any,
+    @Query('workDate') workDate?:string,
+    @Query('page') page?:string,
+    @Query('limit') limit?:string,
+  ){
+    return this.doctorsService.findDoctorSchedules(id,req.user,{
+        workDate,page,limit,
+    });
+  }
+  /**
+   * API lấy các khung giờ khám còn trống (AVAILABLE) của bác sĩ theo ngày
+   * Endpoint: GET /doctors/:id/slots/available?date=YYYY-MM-DD
+   * Quyền truy cập: Mọi tài khoản đã đăng nhập
+   */
+  @Get(':id/slots/available')
+  getAvailableSlots(
+    @Param('id') id:string,
+    @Query('date')date:string,
+  ){
+    return  this.doctorsService.findAvailableSlots(id,date);
   }
 }
