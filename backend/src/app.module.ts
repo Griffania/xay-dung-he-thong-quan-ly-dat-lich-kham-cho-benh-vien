@@ -10,6 +10,7 @@ import { SpecialtiesModule } from './specialties/specialties.module';
 import { DoctorsModule } from './doctors/doctors.module';
 import { WorkSchedulesModule } from './work-schedules/work-schedules.module';
 import { SlotsModule } from './slots/slots.module';
+import { AppointmentsModule } from './appointments/appointments.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { SlotsModule } from './slots/slots.module';
     DoctorsModule,
     WorkSchedulesModule,
     SlotsModule,
+    AppointmentsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

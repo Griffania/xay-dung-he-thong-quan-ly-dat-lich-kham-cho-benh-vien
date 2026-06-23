@@ -458,7 +458,7 @@ export class DoctorsService {
     if(query.workDate){
       const parsedDate = new Date(`${query.workDate}T00:00:00.000Z`);
       if(isNaN(parsedDate.getTime())){
-        throw new NotFoundException('ngày lọc không đún dạng yyyy-mm-dd!');
+        throw new BadRequestException('ngày lọc không đún dạng yyyy-mm-dd!');
       }
       where.workDate=parsedDate;
     }
@@ -502,7 +502,7 @@ export class DoctorsService {
     //ép kiểu dạng chuổi sang Date trong múi giờ UTC
     const parsedDate = new Date(`${dateStr}T00:00:00.000Z`);
     if(isNaN(parsedDate.getTime())){
-      throw new NotFoundException('ngày truy vấn không hợp lệ');
+      throw new BadRequestException('ngày truy vấn không hợp lệ');
     }
     const whereClause:any={
       doctorId,
