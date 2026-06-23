@@ -149,7 +149,7 @@ model Slot {
 
   workSchedule WorkSchedule @relation(fields: [workScheduleId], references: [id], onDelete: Cascade) // Xóa ca làm việc gốc thì xóa luôn các slot nhỏ
   doctor       Doctor       @relation(fields: [doctorId], references: [id])                       // Liên kết tới bác sĩ phụ trách
-  appointment  Appointment?                                                                        // Quan hệ 1:1 với lịch hẹn (Mỗi slot chỉ ứng với 1 cuộc hẹn thành công)
+  appointments Appointment[]                                                                       // Quan hệ 1:N với lịch hẹn (Cho phép đặt lại khi lịch cũ bị hủy)
 
   // Quan hệ đệ quy (Self-relation) để quản lý cấu trúc Slot Cha - Slot Con khi có hành động tách khung giờ
   parentSlot Slot?  @relation("SlotSplit", fields: [parentSlotId], references: [id], onDelete: SetNull) // Nếu xóa slot cha, trường này ở slot con chuyển thành NULL
@@ -165,7 +165,7 @@ model Appointment {
   id        String            @id @default(uuid()) @db.Uuid      // Khóa chính lịch hẹn
   patientId String            @map("patient_id") @db.Uuid        // Khóa ngoại nối tới User (người đi khám)
   doctorId  String            @map("doctor_id") @db.Uuid         // Khóa ngoại nối tới Doctor (bác sĩ được đặt lịch)
-  slotId    String            @unique @map("slot_id") @db.Uuid   // Khóa ngoại duy nhất liên kết với Slot thời gian (Đảm bảo không trùng giờ)
+  slotId    String            @map("slot_id") @db.Uuid           // Khóa ngoại liên kết với Slot thời gian
   symptoms  String?           @db.Text                           // Mô tả triệu chứng ban đầu do bệnh nhân tự nhập khi đặt lịch
   notes     String?           @db.Text                           // Ghi chú thêm của lễ tân hoặc thông tin nội bộ
   status    AppointmentStatus @default(PENDING)                  // Trạng thái cuộc hẹn, mặc định ban đầu là PENDING (Chờ duyệt)

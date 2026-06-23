@@ -33,7 +33,7 @@ export class AppointmentsService{
                 //xác định id bệnh nhân thực tế
                 let finalPatientId='';
                 if(currentUser.role===Role.PATIENT){
-                    finalPatientId = currentUser.userid;
+                    finalPatientId = currentUser.userId;
                 }else if(
                     currentUser.role===Role.RECEPTIONIST||currentUser.role===Role.ADMIN
                 ){
@@ -52,20 +52,51 @@ export class AppointmentsService{
                 if(!patientUser||patientUser.role.code!=Role.PATIENT){
                     throw new NotFoundException('không tìm thấy thông tin bệnh nhân hợp lệ trên hệ thống');
                 }
-                //thực hiện trong database transaction để tránh đặc trùng lịch race condition
+                //thực hiện trong database transaction để tránh đặt trùng lịch race condition
                 return this.prisma.$transaction(async(tx)=>{
-                    //tìm slot và khóa bảng ghi
-                    const slot = await tx.slot.findUnique({
-                        where : {id:slotId},
-                    });
-                    if(!slot){
+                    // 1. Sử dụng SELECT FOR UPDATE để khóa dòng ghi trong bảng slots (Pessimistic Locking)
+                    const slots = await tx.$queryRaw<any[]>`
+                        SELECT 
+                            id, 
+                            date, 
+                            status, 
+                            doctor_id as "doctorId", 
+                            start_time as "startTime", 
+                            end_time as "endTime", 
+                            work_schedule_id as "workScheduleId", 
+                            parent_slot_id as "parentSlotId" 
+                        FROM slots 
+                        WHERE id = ${slotId}::uuid 
+                        FOR UPDATE
+                    `;
+                    
+                    if (!slots || slots.length === 0) {
                         throw new NotFoundException('không tìm thấy slot khám theo yêu cầu');
                     }
+                    const slot = slots[0];
+
                     if(slot.status!==SlotStatus.AVAILABLE){
                         throw new ConflictException('khung giờ khám này đã được đặt trước hoặc bị khóa');
                     }
+
+                    // 2. Kiểm tra xem có lịch hẹn nào đang hoạt động (PENDING hoặc CONFIRMED) liên kết với slot này không
+                    const activeAppointment = await tx.appointment.findFirst({
+                        where: {
+                            slotId: slot.id,
+                            status: {
+                                in: [AppointmentStatus.PENDING, AppointmentStatus.CONFIRMED]
+                            }
+                        }
+                    });
+
+                    if (activeAppointment) {
+                        throw new ConflictException('khung giờ khám này đã được đặt trước hoặc đang được xử lý');
+                    }
+
                     //kiểm tra slot có trong quá khứ không
-                    if(this.isSlotInPast(slot.date,slot.startTime)){
+                    const slotDate = new Date(slot.date);
+                    const slotStartTime = new Date(slot.startTime);
+                    if(this.isSlotInPast(slotDate, slotStartTime)){
                         throw new BadRequestException('không thể đặt lịch hẹn với khung giờ trong quá khứ');
                     }
                     //tạo bản ghi cuộc hẹn (appointment)
@@ -106,10 +137,10 @@ export class AppointmentsService{
                         where : {id:slotId},
                         data:{status:SlotStatus.BOOKED},
                     });
-                        return {
-                            message:'đặt lịch khám thành công',
-                            data :appointment,
-                        };
+                    return {
+                        message:'đặt lịch khám thành công',
+                        data :appointment,
+                    };
                 });
             }
             //hủy lịch khám
