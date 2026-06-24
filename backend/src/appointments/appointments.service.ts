@@ -4,6 +4,7 @@ import { CreateAppointmentsDto } from "./dto/create-appointments.dto";
 import { Role } from "../auth/enums/role.enum";
 import { AppointmentStatus, SlotStatus } from "@prisma/client";
 import { QueryAppointmentsDto } from "./dto/query.appointments.dto";
+import { RescheduleAppointmentDto } from "./dto/reschedule-appointment.dto";
 
 @Injectable()
 export class AppointmentsService{
@@ -328,5 +329,221 @@ export class AppointmentsService{
                     }
                 }
                 return appointment;
+            }
+             //Xác nhận lịch hẹn khám (Confirm Appointment)
+             //Trạng thái chuyển: PENDING -> CONFIRMED
+            async confirm(id:string,currentUser:any){
+                //tìm lịch hẹn và thông tin slot đi kèm
+                const appointment = await this.prisma.appointment.findUnique({
+                    where:{id},
+                    include:{slot:true}
+                });
+                if(!appointment){
+                    throw new NotFoundException('không tìm thấy dữ liệu cuộc hẹn được yêu cầu');
+                }
+                //chỉ cho phép duyệt lịch khi trạng thái lịch là PENDING
+                if(appointment.status!==AppointmentStatus.PENDING){
+                    throw  new BadRequestException(`chỉ có thể xác nhận lịch hẹn ở trạng thái PENDING ! trạng thái lịch hiện tại là ${appointment.status}`);
+                }
+                //cập nhật trạng thái lịch hẹn thàng CONFIRMED
+                const updateAppointment = await this.prisma.appointment.update({
+                    where:{id},
+                    data:{status: AppointmentStatus.CONFIRMED},
+                    include:{
+                        patient:{
+                            select:{
+                                id:true,
+                                fullName:true,
+                                email:true,
+                                phone:true,
+                            }
+                        },
+                        doctor:{
+                            include:{
+                                user:{
+                                    select:{
+                                        fullName:true,
+                                        phone:true,
+                                    }
+                                },
+                                specialty:true,
+                            }
+                        },
+                        slot:true,
+                    }
+                });
+                return {
+                    message:'xác nhận trạng thái lịch hẹn thành công',
+                    data:updateAppointment,
+                };
+            }
+             //Đổi lịch hẹn sang khung giờ khác (Reschedule Appointment)
+             //Quy trình: Giải phóng slot cũ (AVAILABLE) -> Đặt slot mới (BOOKED) -> Cập nhật cuộc hẹn
+            async reschedule(id:string,dto:RescheduleAppointmentDto,currentUser:any){
+                const {newSlotId} = dto;
+                //tìm lịch hẹn gốc
+                const appointment = await this.prisma.appointment.findUnique({
+                    where:{id},
+                    include:{slot:true}
+                });
+                if(!appointment){
+                    throw new NotFoundException('khôn tìm thấy dữ liệu cuộc hẹn yêu cầu');
+                }
+                // ràng buộc chỉ cho thay đổi trạng thái lịch hẹn khi ở trạng thái PENDING hoặc trạng thái CONFIRMED
+                const allowedRescheduleStatus :AppointmentStatus[] = [AppointmentStatus.PENDING,AppointmentStatus.CONFIRMED];
+                if(!allowedRescheduleStatus.includes(appointment.status)){
+                    throw new BadRequestException(`không thể thai đổi lịch hẹn ở trạng thái hiện tại : ${appointment.status}`);
+                }
+                //kiểm tra quyền hạng bệnh nhân chỉ được thay đổi lịch hẹn của chính mình
+                if(currentUser.role===Role.PATIENT){
+                    if(appointment.patientId!==currentUser.userId){
+                        throw new ForbiddenException('bạn không có quyền tha đổi lịch hẹn của người khác');
+                    }
+                }
+                //kiểm tra slot mới trùng với slot hiện tại
+                if(appointment.slotId===newSlotId){
+                    throw new BadRequestException('slot khám mới trùng lập với slot khám hiện tại');
+                }
+                //thực hiện thay đổi trong database transaction để tránh race condition
+                return this.prisma.$transaction(async(tx)=>{
+                     //sử dụng Pessimistic Locking (SELECT FOR UPDATE) để khóa dòng slot mới
+                     const newSlots = await tx.$queryRaw<any[]>`SELECT id,
+                     date,
+                     status,
+                     doctor_id as "doctorId",
+                     start_time as "startTime",
+                     end_time as "endTime",
+                     work_schedule_id as "workScheduleId",
+                     parent_slot_id as "parentSlotId"
+                     FROM slots
+                     WHERE id=${newSlotId}::uuid
+                     FOR UPDATE`;
+                     if(!newSlots||newSlots.length===0){
+                        throw new NotFoundException('không tìm thấy slot khám mới theo yêu cầu');
+                     }
+                     const newSlot = newSlots[0];
+                     //kiểm tra slot có khả dụng hay không
+                     if(newSlot.status!==SlotStatus.AVAILABLE){
+                        throw new ConflictException('slot khám mới đã được đặt trước hoặc bị khóa');
+                     }
+                     //kiểm tra slot mới vừa tạo có nằm trong quá khứ hay không
+                     const slotDate = new Date(newSlot.date);
+                     const slotStartTime = new Date(newSlot.startTime);
+                     if(this.isSlotInPast(slotDate,slotStartTime)){
+                        throw new BadRequestException('không thể thực hiện đổi lịch khám sang khung giờ trog quá khứ');
+                     }
+                     //giải phóng slot cũ về trạng thái có thể đặt
+                     await tx.slot.update({
+                        where:{id:appointment.slotId},
+                        data:{status:SlotStatus.AVAILABLE}
+                     });
+                     //chiếm giữ slot mới (BOOKED)
+                     await tx.slot.update({
+                        where:{id:newSlotId},
+                        data:{status:SlotStatus.BOOKED}
+                     });
+                     //cập nhật thông tin cuộc hẹn
+                     const updatedAppointment = await tx.appointment.update({
+                        where:{id},
+                        data:{
+                            slotId:newSlotId,// Gán cuộc hẹn này vào một khung giờ (slot) mới
+                            doctorId:newSlot.doctorId // cập nhật bác sĩ mới nếu đổi bác sĩ
+                        },
+                        include:{
+                            patient:{
+                                select:{
+                                    id:true,
+                                    fullName:true,
+                                    email:true,
+                                    phone:true,
+                                }
+                            },
+                            doctor:{
+                                include:{
+                                    user:{
+                                        select:{
+                                            fullName:true,
+                                            phone:true,
+                                        }
+                                    },
+                                    specialty:true,
+                                }
+                            },
+                            slot:true,
+                        }
+                     });
+                     return {
+                        message:'đổi lịch hẹn thành công',
+                        data: updatedAppointment
+                     };
+                });
+            }
+
+             //3. Đánh dấu bệnh nhân vắng khám (Mark No-Show)
+             //Trạng thái cuộc hẹn -> NO_SHOW. Trạng thái hàng đợi nếu có -> NO_SHOW.
+            async markNoShow(id:string,currentUser:any){
+                //tìm cuộc hẹn kèm hàng đợi nếu có
+                const appointment = await this.prisma.appointment.findUnique({
+                    where:{id},
+                    include:{
+                        slot:true,
+                        queueEntry:true,
+                    }
+                });
+                if(!appointment){
+                    throw new NotFoundException('không tìm thấy dữ liệu cuộc hẹn yêu cầu');
+                }
+                //chỉ cho phép đánh đấu vắng khi lịch hẹn đang ở trạng thái PENDING CONFIRMED CHECKED_IN
+                const allowedNoShowStatus  :AppointmentStatus[]=[
+                    AppointmentStatus.PENDING,
+                    AppointmentStatus.CONFIRMED,
+                    AppointmentStatus.CHECKED_IN,
+                ];
+                if(!allowedNoShowStatus.includes(appointment.status)){
+                    throw new BadRequestException(`không thể đánh dấu vắng mặt ở trạng thái lịch hẹn hiện tại : ${appointment.status}`);
+                }
+                return this.prisma.$transaction(async(tx)=>{
+                    //cập nhật trạng thái cuộc hẹn thành no show
+                    const updatedAppointment= await tx.appointment.update({
+                        where:{id},
+                        data:{status:AppointmentStatus.NO_SHOW},
+                        include:{
+                            patient:{
+                                select:{
+                                    id:true,
+                                    fullName:true,
+                                    email:true,
+                                    phone:true,
+                                }
+                            },
+                            doctor:{
+                                include:{
+                                    user:{
+                                        select:{
+                                            id:true,
+                                            phone:true,
+                                        }
+                                    },
+                                    specialty:true,
+                                }
+                                
+                            },
+                            slot:true,
+                            queueEntry:true,
+                        }
+                    });
+                        //nếu bệnh nhân đã đến và checkin vào hàng đợi cập nhật trạng thái hàng đợi là noshow
+                        if(appointment.queueEntry){
+                            await tx.queueEntry.update({
+                                where:{appointmentId:id},
+                                data:{status:'NO_SHOW'as any}
+                            });
+                        }
+                        //giử nguyên trạng thái slot là BOOKED vì thời gian khám đã trôi qua không thể giải phóng 
+                        return {
+                            message:'đánh dấu bệnh nhân vắng khám thành công',
+                            data:updatedAppointment
+                        };
+                });
             }
 }
