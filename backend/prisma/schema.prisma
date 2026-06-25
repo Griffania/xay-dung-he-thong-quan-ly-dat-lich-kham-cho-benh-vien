@@ -119,7 +119,7 @@ model WorkSchedule {
   workDate        DateTime @map("work_date") @db.Date             // Ngày làm việc (chỉ lấy ngày, ví dụ: 2026-06-01)
   startTime       DateTime @map("start_time") @db.Time()          // Giờ bắt đầu ca làm việc (ví dụ: 08:00)
   endTime         DateTime @map("end_time") @db.Time()            // Giờ kết thúc ca làm việc (ví dụ: 12:00)
-  slotDurationMin Int      @default(15) @map("slot_duration_min") // Độ dài tiêu chuẩn của một ca khám (mặc định là 15 phút)
+  slotDurationMin Int      @default(15) @map("slot_duration_min") // Độ dài tiêu chuẩn của một ca khám 
   createdAt       DateTime @default(now()) @map("created_at")      // Thời gian tạo ca làm việc này
 
   doctor Doctor @relation(fields: [doctorId], references: [id], onDelete: Cascade) // Nếu xóa bác sĩ, ca làm việc tự động xóa theo
