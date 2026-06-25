@@ -2,7 +2,7 @@ import { BadRequestException, ConflictException, ForbiddenException, Injectable,
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateAppointmentsDto } from "./dto/create-appointments.dto";
 import { Role } from "../auth/enums/role.enum";
-import { AppointmentStatus, SlotStatus } from "@prisma/client";
+import { AppointmentStatus, QueueStatus, SlotStatus } from "@prisma/client";
 import { QueryAppointmentsDto } from "./dto/query.appointments.dto";
 import { RescheduleAppointmentDto } from "./dto/reschedule-appointment.dto";
 
@@ -479,7 +479,7 @@ export class AppointmentsService{
                 });
             }
 
-             //3. Đánh dấu bệnh nhân vắng khám (Mark No-Show)
+             //Đánh dấu bệnh nhân vắng khám (Mark No-Show)
              //Trạng thái cuộc hẹn -> NO_SHOW. Trạng thái hàng đợi nếu có -> NO_SHOW.
             async markNoShow(id:string,currentUser:any){
                 //tìm cuộc hẹn kèm hàng đợi nếu có
@@ -544,6 +544,129 @@ export class AppointmentsService{
                             message:'đánh dấu bệnh nhân vắng khám thành công',
                             data:updatedAppointment
                         };
+                });
+            }
+            //bệnh nhân checkin khi đến nơi
+            //quy trình checkin: chuyển trạng thái status lịch hẹn sang CHECK_IN-> tạo QueueEntry mới cho hàng đợi
+            async checkIn(id:string,currentUser:any){
+                //tìm cuộc hẹn slot khám và queueEntry hiện tại
+                const appointment = await this.prisma.appointment.findUnique({
+                    where:{id},
+                    include:{
+                        slot:true,
+                        queueEntry:true,
+                    },
+                });
+                if(!appointment){
+                    throw new NotFoundException('không tìm thấy dữ liệu cuộc hẹn được yêu cầu');
+                }
+                //chỉ cho phép checkin khi cuộc hẹn ở trạng thái CONFIRMED
+                if(appointment.status!==AppointmentStatus.CONFIRMED){
+                    throw new BadRequestException(`chỉ có thể checkin với lịch hẹn ở trạng thái CONFIRMED trạng thái lịch hẹn hiện tại là ${appointment.status}`);
+                }
+                //kiểm tra quyền bệnh nhân chỉ được phép checkin cho lịch hẹn của chính mình
+                if(currentUser.role===Role.PATIENT){
+                    if(appointment.patientId!==currentUser.userId){
+                        throw new ForbiddenException('bạn không có quyền checkin cho cuộc hẹn này');
+                    }
+                }
+                //thực hiện transaction cập nhật trạng thái mới cho lịch hẹn
+                return this.prisma.$transaction(async(tx)=>{
+                    //cập nhật trạng thái cuộc hẹn thành checkin
+                    const updateAppointment = await tx.appointment.update({
+                        where:{id},
+                        data:{status: AppointmentStatus.CHECKED_IN},
+                        include:{
+                            patient:{
+                                select:{
+                                    id:true,
+                                    fullName:true,
+                                    email:true,
+                                    phone:true,
+                                },
+                            },
+                            doctor:{
+                                    include:{
+                                        user:{
+                                            select:{
+                                                id:true,
+                                                fullName:true,
+                                                phone:true,
+                                            },
+                                        },
+                                        specialty:true,
+                                    },
+                            },
+                            slot:true,
+                        },
+                    });
+                    //tính số thứ tự khám tiếp theo (queueno) cho bác sĩ trong ngày hôm nay
+                    //lấy thời gian bắt đầu và kết thúc ngày hôm nay (00:00:00-23:59:59)
+                    const startOfToday = new Date();
+                    startOfToday.setHours(0,0,0,0);
+                    const endOfToday = new Date();
+                    endOfToday.setHours(23,59,59,999);
+                    //tìm QueueEntry có số thứ tự lớn nhất cho bác sĩ này trong ngày hôm nay
+                    const maxQueueEntry = await tx.queueEntry.findFirst({
+                        where:{
+                            doctorId:appointment.doctorId,
+                            createdAt:{
+                                gte:startOfToday,
+                                lte:endOfToday,
+                            },
+                        },
+                        orderBy:{
+                            queueNo:'desc',
+                        },
+                    });
+                    const nextQueueNo = maxQueueEntry?maxQueueEntry.queueNo+1:1;
+                    //tính thời gian chờ dự kiến (estimateWait)
+                    //đếm số lượng bệnh nhân đang chờ (WAITING) hoặc đang khám (IN_PROGRESS) cho bác sĩ này hôm nay
+                    const acctiveQueueCount = await tx.queueEntry.count({
+                        where:{
+                            doctorId:appointment.doctorId,
+                            status:{
+                                in:['WAITING','IN_PROGRESS'],
+                            },
+                            createdAt:{
+                                gte:startOfToday,
+                                lte:endOfToday,
+                            },
+                        },
+                    });
+                    //lấy thời lượng khám của 1 ca (slotDurationMin) từ WorkSchedule của slot đó
+                    let slotDuration = 30;
+                    if(appointment.slot.workScheduleId){
+                        const schedule = await tx.workSchedule.findUnique({
+                            where:{
+                                id:appointment.slot.workScheduleId
+                            },
+                            select:{
+                                slotDurationMin:true,
+                            },
+                        });
+                        if(schedule){
+                            slotDuration=schedule.slotDurationMin;
+                        }
+                    }
+                    const estimateWaitMin = acctiveQueueCount*slotDuration;
+                    //tạo mới lược xếp hàng khám (QueueEntry)
+                    const queueEntry = await tx.queueEntry.create({
+                        data:{
+                            appointmentId:id,
+                            doctorId:appointment.doctorId,
+                            queueNo:nextQueueNo,
+                            status:QueueStatus.WAITING,
+                            estimatedWait:estimateWaitMin,
+                        },
+                    });
+                    return  {
+                        message:'thực hiện checkin thành công và đã xếp hàng khám',
+                        data:{
+                            appointment:updateAppointment,
+                            queueEntry,
+                        },
+                    };
                 });
             }
 }

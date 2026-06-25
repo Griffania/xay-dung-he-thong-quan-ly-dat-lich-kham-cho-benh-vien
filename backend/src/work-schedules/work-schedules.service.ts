@@ -51,7 +51,7 @@ export class WorkSchedulesService {
       workDate: workDateStr,
       startTime: startTimeStr,
       endTime: endTimeStr,
-      slotDurationMin = 15,
+      slotDurationMin = 30,
     } = createWorkScheduleDto;
     // 1. Kiểm tra sự tồn tại của Bác sĩ
     const doctor = await this.prisma.doctor.findUnique({
@@ -290,7 +290,7 @@ export class WorkSchedulesService {
     const bookedSlot = await this.prisma.slot.findFirst({
       where: {
         workScheduleId: id,
-        OR: [{ status: SlotStatus.BOOKED }, { appointment: { isNot: null } }],
+        status: SlotStatus.BOOKED,
       },
     });
     if (bookedSlot) {
@@ -409,7 +409,7 @@ export class WorkSchedulesService {
     const bookedSlot = await this.prisma.slot.findFirst({
       where: {
         workScheduleId: id,
-        OR: [{ status: SlotStatus.BOOKED }, { appointment: { isNot: null } }],
+        status: SlotStatus.BOOKED,
       },
     });
     if (bookedSlot) {
