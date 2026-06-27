@@ -26,14 +26,14 @@ export function middleware(request: NextRequest) {
   const token = request.cookies.get('accessToken')?.value;
   const isProtectedRoute = pathname.startsWith('/dashboard');
   const isAuthRoute = pathname.startsWith('/login');
-  // 1. Trường hợp chưa đăng nhập
+  //  Trường hợp chưa đăng nhập
   if (isProtectedRoute && !token) {
     const loginUrl = new URL('/login', request.url);
     // Lưu lại trang đích để sau khi đăng nhập có thể quay lại nếu cần (tùy chọn)
     loginUrl.searchParams.set('redirect', pathname);
     return NextResponse.redirect(loginUrl);
   }
-  // 2. Trường hợp đã có token
+  //  Trường hợp đã có token
   if (token) {
     const payload = decodeJwtPayload(token);
     const role = payload?.role?.toUpperCase();
