@@ -1,4 +1,5 @@
-import { IsNotEmpty, IsOptional, IsString, IsUUID } from "class-validator";
+import { BookingType } from "@prisma/client";
+import { IsEnum, IsNotEmpty, IsOptional, IsString, IsUUID } from "class-validator";
 
 export class CreateAppointmentsDto{
     @IsUUID('4',{message:'ID slot khám phải là mã có dạng uuid hợp lệ'})
@@ -16,4 +17,8 @@ export class CreateAppointmentsDto{
     @IsString({message:'chú thích phải là chuổi văn bản'})
     @IsOptional()
     notes?:string;
+
+    @IsEnum(BookingType, { message: 'Phương thức đặt lịch không hợp lệ (ONLINE hoặc WALK_IN)' })
+    @IsOptional()
+    bookingType?: BookingType;
 }

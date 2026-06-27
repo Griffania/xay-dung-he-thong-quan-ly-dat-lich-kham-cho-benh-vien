@@ -1,14 +1,19 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotAcceptableException, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotAcceptableException, NotFoundException, Inject, forwardRef } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateAppointmentsDto } from "./dto/create-appointments.dto";
 import { Role } from "../auth/enums/role.enum";
-import { AppointmentStatus, QueueStatus, SlotStatus } from "@prisma/client";
+import { AppointmentStatus, QueueStatus, SlotStatus, BookingType } from "@prisma/client";
 import { QueryAppointmentsDto } from "./dto/query.appointments.dto";
 import { RescheduleAppointmentDto } from "./dto/reschedule-appointment.dto";
+import { QueuesService } from "../queues/queues.service";
 
 @Injectable()
 export class AppointmentsService{
-    constructor (private readonly prisma: PrismaService){}
+    constructor (
+        private readonly prisma: PrismaService,
+        @Inject(forwardRef(() => QueuesService))
+        private readonly queuesService: QueuesService,
+    ){}
             //kiểm tra slot có nằm trong quá khứ so với thời gian hiện tại hay không
             private isSlotInPast(slotDate:Date,slotStartTime:Date):boolean{
                 const now = new Date();
@@ -109,6 +114,7 @@ export class AppointmentsService{
                             symptoms: symptoms || null,
                             notes : notes || null,
                             status :AppointmentStatus.PENDING,
+                            bookingType: createDto.bookingType || (currentUser.role === Role.PATIENT ? BookingType.ONLINE : BookingType.WALK_IN),
                         },
                         include:{
                             patient:{
@@ -600,71 +606,33 @@ export class AppointmentsService{
                             slot:true,
                         },
                     });
-                    //tính số thứ tự khám tiếp theo (queueno) cho bác sĩ trong ngày hôm nay
-                    //lấy thời gian bắt đầu và kết thúc ngày hôm nay (00:00:00-23:59:59)
-                    const startOfToday = new Date();
-                    startOfToday.setHours(0,0,0,0);
-                    const endOfToday = new Date();
-                    endOfToday.setHours(23,59,59,999);
-                    //tìm QueueEntry có số thứ tự lớn nhất cho bác sĩ này trong ngày hôm nay
-                    const maxQueueEntry = await tx.queueEntry.findFirst({
-                        where:{
-                            doctorId:appointment.doctorId,
-                            createdAt:{
-                                gte:startOfToday,
-                                lte:endOfToday,
-                            },
-                        },
-                        orderBy:{
-                            queueNo:'desc',
-                        },
-                    });
-                    const nextQueueNo = maxQueueEntry?maxQueueEntry.queueNo+1:1;
-                    //tính thời gian chờ dự kiến (estimateWait)
-                    //đếm số lượng bệnh nhân đang chờ (WAITING) hoặc đang khám (IN_PROGRESS) cho bác sĩ này hôm nay
-                    const acctiveQueueCount = await tx.queueEntry.count({
-                        where:{
-                            doctorId:appointment.doctorId,
-                            status:{
-                                in:['WAITING','IN_PROGRESS'],
-                            },
-                            createdAt:{
-                                gte:startOfToday,
-                                lte:endOfToday,
-                            },
-                        },
-                    });
-                    //lấy thời lượng khám của 1 ca (slotDurationMin) từ WorkSchedule của slot đó
-                    let slotDuration = 30;
-                    if(appointment.slot.workScheduleId){
-                        const schedule = await tx.workSchedule.findUnique({
-                            where:{
-                                id:appointment.slot.workScheduleId
-                            },
-                            select:{
-                                slotDurationMin:true,
-                            },
-                        });
-                        if(schedule){
-                            slotDuration=schedule.slotDurationMin;
-                        }
-                    }
-                    const estimateWaitMin = acctiveQueueCount*slotDuration;
-                    //tạo mới lược xếp hàng khám (QueueEntry)
+                    // 1. Tự động cấp số thứ tự khám thông minh qua QueuesService
+                    const nextQueueNo = await this.queuesService.generateQueueNumber(tx, appointment.doctorId);
+
+                    // 2. Tạo mới lượt xếp hàng khám (QueueEntry) với thời gian chờ tạm thời
                     const queueEntry = await tx.queueEntry.create({
                         data:{
                             appointmentId:id,
                             doctorId:appointment.doctorId,
                             queueNo:nextQueueNo,
                             status:QueueStatus.WAITING,
-                            estimatedWait:estimateWaitMin,
+                            estimatedWait: 0,
                         },
                     });
+
+                    // 3. Sắp xếp lại hàng đợi theo thứ tự ưu tiên và tính toán lại thời gian chờ động cho tất cả bệnh nhân
+                    await this.queuesService.recalculateWaitTimes(tx, appointment.doctorId);
+
+                    // Lấy lại bản ghi QueueEntry sau khi đã cập nhật estimatedWait để trả về chính xác
+                    const updatedQueueEntry = await tx.queueEntry.findUnique({
+                        where: { id: queueEntry.id }
+                    });
+
                     return  {
                         message:'thực hiện checkin thành công và đã xếp hàng khám',
                         data:{
                             appointment:updateAppointment,
-                            queueEntry,
+                            queueEntry: updatedQueueEntry,
                         },
                     };
                 });

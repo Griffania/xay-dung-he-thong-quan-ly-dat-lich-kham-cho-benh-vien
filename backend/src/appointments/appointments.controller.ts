@@ -22,7 +22,7 @@ export class AppointmentsController{
   create(@Body()createDto:CreateAppointmentsDto,@Req() req:any){
     return this.appointmentsService.create(createDto,req.user);
   }
-  //lấy danh sách lịch hẹn có phân trang và bộ lọc bảo mật
+  //lấy danh sách lịch hẹn 
   @Get()
   findAll(@Query() queryDto: QueryAppointmentsDto, @Req() req: any) {
     return this.appointmentsService.findAll(queryDto, req.user);
@@ -61,5 +61,12 @@ export class AppointmentsController{
   @Roles(Role.RECEPTIONIST, Role.DOCTOR, Role.ADMIN)
   markNoShow(@Param('id') id: string, @Req() req: any) {
     return this.appointmentsService.markNoShow(id, req.user);
+  }
+  //api checkin cho bệnh nhân (bệnh nhân tự checkin hoặc là lễ tân và admin checkin giúp bệnh nhân)
+  @Patch(':id/check-in')
+  @UseGuards(RolesGuard)
+  @Roles(Role.PATIENT,Role.RECEPTIONIST,Role.ADMIN)
+  checkIn(@Param('id')id:string,@Req()req:any){
+    return this.appointmentsService.checkIn(id,req.user);
   }
 }

@@ -35,6 +35,12 @@ enum SlotStatus {
   LOCKED    // Khung giờ bị khóa thủ công (bác sĩ nghỉ đột xuất, họp, bảo trì...)
 }
 
+/// Phương thức đặt lịch khám bệnh
+enum BookingType {
+  ONLINE   // Đặt lịch trực tuyến qua website/ứng dụng
+  WALK_IN  // Bệnh nhân vãng lai đăng ký trực tiếp tại quầy
+}
+
 /// Trạng thái lịch hẹn — vòng đời đầy đủ của một ca đặt lịch
 enum AppointmentStatus {
   PENDING     // Vừa đặt lịch xong trực tuyến, chờ lễ tân/hệ thống xác nhận
@@ -169,6 +175,7 @@ model Appointment {
   symptoms  String?           @db.Text                           // Mô tả triệu chứng ban đầu do bệnh nhân tự nhập khi đặt lịch
   notes     String?           @db.Text                           // Ghi chú thêm của lễ tân hoặc thông tin nội bộ
   status    AppointmentStatus @default(PENDING)                  // Trạng thái cuộc hẹn, mặc định ban đầu là PENDING (Chờ duyệt)
+  bookingType BookingType     @default(ONLINE) @map("booking_type")
   createdAt DateTime          @default(now()) @map("created_at") // Thời gian bệnh nhân bấm nút đặt lịch hẹn
   updatedAt DateTime          @updatedAt @map("updated_at")      // Thời gian cập nhật trạng thái lịch hẹn mới nhất
 
