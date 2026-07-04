@@ -7,21 +7,19 @@ import { Role } from "../auth/enums/role.enum";
 import { CreateAppointmentsDto } from "./dto/create-appointments.dto";
 import { QueryAppointmentsDto } from "./dto/query.appointments.dto";
 import { RescheduleAppointmentDto } from "./dto/reschedule-appointment.dto";
+import { CompleteExaminationDto } from "./dto/complete-examination.dto";
 
-@Controller('appointments')
-@UseGuards(JwtAuthGuard)
-export class AppointmentsController{
-    constructor(private readonly appointmentsService: AppointmentsService){}
-     /**
-   * Đặt lịch hẹn khám bệnh mới
-   * Chỉ cho phép PATIENT, RECEPTIONIST, ADMIN thực hiện đặt
-   */
-  @Post()
-  @UseGuards(RolesGuard)
-  @Roles(Role.PATIENT, Role.RECEPTIONIST, Role.ADMIN)
-  create(@Body()createDto:CreateAppointmentsDto,@Req() req:any){
-    return this.appointmentsService.create(createDto,req.user);
-  }
+  @Controller('appointments')
+  @UseGuards(JwtAuthGuard)
+  export class AppointmentsController{
+      constructor(private readonly appointmentsService: AppointmentsService){}
+      
+    @Post()
+    @UseGuards(RolesGuard)
+    @Roles(Role.PATIENT, Role.RECEPTIONIST, Role.ADMIN)
+    create(@Body()createDto:CreateAppointmentsDto,@Req() req:any){
+      return this.appointmentsService.create(createDto,req.user);
+    }
   //lấy danh sách lịch hẹn 
   @Get()
   findAll(@Query() queryDto: QueryAppointmentsDto, @Req() req: any) {
@@ -68,5 +66,25 @@ export class AppointmentsController{
   @Roles(Role.PATIENT,Role.RECEPTIONIST,Role.ADMIN)
   checkIn(@Param('id')id:string,@Req()req:any){
     return this.appointmentsService.checkIn(id,req.user);
+  }
+
+  // Bắt đầu khám bệnh (Bác sĩ, Admin)
+  @Patch(':id/start-examination')
+  @UseGuards(RolesGuard)
+  @Roles(Role.DOCTOR, Role.ADMIN)
+  startExamination(@Param('id') id: string, @Req() req: any) {
+    return this.appointmentsService.startExamination(id, req.user);
+  }
+
+  // Hoàn thành khám bệnh và tạo hồ sơ bệnh án (Bác sĩ, Admin)
+  @Patch(':id/complete-examination')
+  @UseGuards(RolesGuard)
+  @Roles(Role.DOCTOR, Role.ADMIN)
+  completeExamination(
+    @Param('id') id: string,
+    @Body() completeDto: CompleteExaminationDto,
+    @Req() req: any,
+  ) {
+    return this.appointmentsService.completeExamination(id, completeDto, req.user);
   }
 }

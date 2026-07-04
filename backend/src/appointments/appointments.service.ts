@@ -2,9 +2,10 @@ import { BadRequestException, ConflictException, ForbiddenException, Injectable,
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateAppointmentsDto } from "./dto/create-appointments.dto";
 import { Role } from "../auth/enums/role.enum";
-import { AppointmentStatus, QueueStatus, SlotStatus, BookingType } from "@prisma/client";
+import { AppointmentStatus, QueueStatus, SlotStatus, BookingType, QueueEntry } from "@prisma/client";
 import { QueryAppointmentsDto } from "./dto/query.appointments.dto";
 import { RescheduleAppointmentDto } from "./dto/reschedule-appointment.dto";
+import { CompleteExaminationDto } from "./dto/complete-examination.dto";
 import { QueuesService } from "../queues/queues.service";
 
 @Injectable()
@@ -32,11 +33,9 @@ export class AppointmentsService{
                 }
                 return false;
             }
-            //tạo lịch mới (đặt lịch khám)
             //nghiệp vụ đổi trạng thái slot->booked , tạo Appointment ở trạng thái Pending
             async create(createDto: CreateAppointmentsDto,currentUser:any){
                 const {slotId,patientId,symptoms,notes} = createDto;
-                //xác định id bệnh nhân thực tế
                 let finalPatientId='';
                 if(currentUser.role===Role.PATIENT){
                     finalPatientId = currentUser.userId;
@@ -50,7 +49,6 @@ export class AppointmentsService{
                 }else {
                     throw new ForbiddenException('bác sĩ không có quyền đặt lịch hẹn');
                 }
-                //xác định bệnh nhân tồn tại
                 const patientUser = await this.prisma.user.findUnique({
                     where:{id:finalPatientId},
                     include:{role:true},
@@ -60,7 +58,7 @@ export class AppointmentsService{
                 }
                 //thực hiện trong database transaction để tránh đặt trùng lịch race condition
                 return this.prisma.$transaction(async(tx)=>{
-                    // 1. Sử dụng SELECT FOR UPDATE để khóa dòng ghi trong bảng slots (Pessimistic Locking)
+                    //Sử dụng SELECT FOR UPDATE để khóa dòng ghi trong bảng slots (Pessimistic Locking)
                     const slots = await tx.$queryRaw<any[]>`
                         SELECT 
                             id, 
@@ -85,7 +83,7 @@ export class AppointmentsService{
                         throw new ConflictException('khung giờ khám này đã được đặt trước hoặc bị khóa');
                     }
 
-                    // 2. Kiểm tra xem có lịch hẹn nào đang hoạt động (PENDING hoặc CONFIRMED) liên kết với slot này không
+                    // Kiểm tra xem có lịch hẹn nào đang hoạt động (PENDING hoặc CONFIRMED) liên kết với slot này không
                     const activeAppointment = await tx.appointment.findFirst({
                         where: {
                             slotId: slot.id,
@@ -150,7 +148,6 @@ export class AppointmentsService{
                     };
                 });
             }
-            //hủy lịch khám
             //nghiệp vụ chuyển trạng thái lịch hẹn -> cancelled    , slot  -> available
             async cancel(id:string,currentUser:any){
                 //tìm lịch hẹn kèm theo thông tin của slot
@@ -224,7 +221,7 @@ export class AppointmentsService{
                     if(!doctorProfile){
                         throw new NotFoundException('không tìm thấy hồ sơ bác sĩ trên hệ thống');
                     }
-                    where.doctorId= doctorProfile.userId;
+                    where.doctorId= doctorProfile.id;
                 }else{
                     //admin và lễ tân có thể xem tất cả và lọc theo yêu cầu
                     if(query.patientId){
@@ -510,9 +507,23 @@ export class AppointmentsService{
                 }
                 return this.prisma.$transaction(async(tx)=>{
                     //cập nhật trạng thái cuộc hẹn thành no show
-                    const updatedAppointment= await tx.appointment.update({
+                    await tx.appointment.update({
                         where:{id},
-                        data:{status:AppointmentStatus.NO_SHOW},
+                        data:{status:AppointmentStatus.NO_SHOW}
+                    });
+
+                    //nếu bệnh nhân đã đến và checkin vào hàng đợi cập nhật trạng thái hàng đợi là noshow
+                    if(appointment.queueEntry){
+                        await tx.queueEntry.update({
+                            where:{appointmentId:id},
+                            data:{status:'NO_SHOW' as any}
+                        });
+                        // Tính toán lại thời gian chờ của hàng đợi
+                        await this.queuesService.recalculateWaitTimes(tx, appointment.doctorId);
+                    }
+
+                    const updatedAppointment = await tx.appointment.findUnique({
+                        where:{id},
                         include:{
                             patient:{
                                 select:{
@@ -532,24 +543,17 @@ export class AppointmentsService{
                                     },
                                     specialty:true,
                                 }
-                                
                             },
                             slot:true,
                             queueEntry:true,
                         }
                     });
-                        //nếu bệnh nhân đã đến và checkin vào hàng đợi cập nhật trạng thái hàng đợi là noshow
-                        if(appointment.queueEntry){
-                            await tx.queueEntry.update({
-                                where:{appointmentId:id},
-                                data:{status:'NO_SHOW'as any}
-                            });
-                        }
-                        //giử nguyên trạng thái slot là BOOKED vì thời gian khám đã trôi qua không thể giải phóng 
-                        return {
-                            message:'đánh dấu bệnh nhân vắng khám thành công',
-                            data:updatedAppointment
-                        };
+
+                    //giử nguyên trạng thái slot là BOOKED vì thời gian khám đã trôi qua không thể giải phóng 
+                    return {
+                        message:'đánh dấu bệnh nhân vắng khám thành công',
+                        data:updatedAppointment
+                    };
                 });
             }
             //bệnh nhân checkin khi đến nơi
@@ -634,6 +638,224 @@ export class AppointmentsService{
                             appointment:updateAppointment,
                             queueEntry: updatedQueueEntry,
                         },
+                    };
+                });
+            }
+
+            // bác sĩ bắt đầu khám cho bệnh nhân
+            async startExamination(id: string, currentUser: any) {
+                const appointment = await this.prisma.appointment.findUnique({
+                    where: { id },
+                    include: {
+                        slot: true,
+                        queueEntry: true,
+                    }
+                });
+
+                if (!appointment) {
+                    throw new NotFoundException('không tìm thấy dữ liệu cuộc hẹn yêu cầu');
+                }
+
+                if (appointment.status !== AppointmentStatus.CHECKED_IN) {
+                    throw new BadRequestException(`chỉ có thể bắt đầu khám với lịch hẹn ở trạng thái CHECKED_IN, trạng thái hiện tại là ${appointment.status}`);
+                }
+
+                if (currentUser.role === Role.DOCTOR) {
+                    const doctor = await this.prisma.doctor.findUnique({
+                        where: { userId: currentUser.userId }
+                    });
+                    if (!doctor || appointment.doctorId !== doctor.id) {
+                        throw new ForbiddenException('bạn không có quyền bắt đầu khám cho cuộc hẹn của bác sĩ khác');
+                    }
+                }
+
+                return this.prisma.$transaction(async (tx) => {
+                    const now = new Date();
+
+                    // Tự động đóng các ca khám khác đang kẹt ở trạng thái IN_PROGRESS của bác sĩ này
+                    const activeTodayStart = new Date();
+                    activeTodayStart.setHours(0, 0, 0, 0);
+                    const activeTodayEnd = new Date();
+                    activeTodayEnd.setHours(23, 59, 59, 999);
+
+                    const currentActiveEntries = await tx.queueEntry.findMany({
+                        where: {
+                            doctorId: appointment.doctorId,
+                            status: QueueStatus.IN_PROGRESS,
+                            appointmentId: { not: id },
+                            createdAt: {
+                                gte: activeTodayStart,
+                                lte: activeTodayEnd,
+                            },
+                        },
+                    });
+
+                    for (const activeEntry of currentActiveEntries) {
+                        await tx.queueEntry.update({
+                            where: { id: activeEntry.id },
+                            data: {
+                                status: QueueStatus.DONE,
+                                completedAt: now,
+                            },
+                        });
+                        await tx.appointment.update({
+                            where: { id: activeEntry.appointmentId },
+                            data: {
+                                status: AppointmentStatus.COMPLETED,
+                            },
+                        });
+                    }
+
+                    // cập nhật trạng thái lịch hẹn thành IN_PROGRESS
+                    const updatedAppointment = await tx.appointment.update({
+                        where: { id },
+                        data: { status: AppointmentStatus.IN_PROGRESS },
+                        include: {
+                            patient: {
+                                select: {
+                                    id: true,
+                                    fullName: true,
+                                    email: true,
+                                    phone: true,
+                                }
+                            },
+                            doctor: {
+                                include: {
+                                    user: {
+                                        select: {
+                                            id: true,
+                                            fullName: true,
+                                            phone: true,
+                                        }
+                                    },
+                                    specialty: true,
+                                }
+                            },
+                            slot: true,
+                        }
+                    });
+
+                    // cập nhật trạng thái hàng đợi khám thành IN_PROGRESS
+                    let updatedQueueEntry: QueueEntry | null = null;
+                    if (appointment.queueEntry) {
+                        updatedQueueEntry = await tx.queueEntry.update({
+                            where: { appointmentId: id },
+                            data: {
+                                status: QueueStatus.IN_PROGRESS,
+                                startedAt: now,
+                                calledAt: appointment.queueEntry.calledAt ? undefined : now,
+                            }
+                        });
+                    }
+
+                    // tính lại thời gian chờ của hàng đợi
+                    await this.queuesService.recalculateWaitTimes(tx, appointment.doctorId);
+
+                    return {
+                        message: 'bắt đầu khám bệnh thành công',
+                        data: {
+                            appointment: updatedAppointment,
+                            queueEntry: updatedQueueEntry,
+                        }
+                    };
+                });
+            }
+
+            // bác sĩ hoàn thành khám bệnh và lưu hồ sơ bệnh án
+            async completeExamination(id: string, completeDto: CompleteExaminationDto, currentUser: any) {
+                const appointment = await this.prisma.appointment.findUnique({
+                    where: { id },
+                    include: {
+                        slot: true,
+                        queueEntry: true,
+                    }
+                });
+
+                if (!appointment) {
+                    throw new NotFoundException('không tìm thấy dữ liệu cuộc hẹn yêu cầu');
+                }
+
+                if (appointment.status !== AppointmentStatus.IN_PROGRESS) {
+                    throw new BadRequestException(`chỉ có thể hoàn thành khám với lịch hẹn ở trạng thái IN_PROGRESS, trạng thái hiện tại là ${appointment.status}`);
+                }
+
+                if (currentUser.role === Role.DOCTOR) {
+                    const doctor = await this.prisma.doctor.findUnique({
+                        where: { userId: currentUser.userId }
+                    });
+                    if (!doctor || appointment.doctorId !== doctor.id) {
+                        throw new ForbiddenException('bạn không có quyền hoàn thành khám cho cuộc hẹn của bác sĩ khác');
+                    }
+                }
+
+                return this.prisma.$transaction(async (tx) => {
+                    const now = new Date();
+
+                    // cập nhật trạng thái lịch hẹn thành COMPLETED
+                    const updatedAppointment = await tx.appointment.update({
+                        where: { id },
+                        data: { status: AppointmentStatus.COMPLETED },
+                        include: {
+                            patient: {
+                                select: {
+                                    id: true,
+                                    fullName: true,
+                                    email: true,
+                                    phone: true,
+                                }
+                            },
+                            doctor: {
+                                include: {
+                                    user: {
+                                        select: {
+                                            id: true,
+                                            fullName: true,
+                                            phone: true,
+                                        }
+                                    },
+                                    specialty: true,
+                                }
+                            },
+                            slot: true,
+                        }
+                    });
+
+                    // cập nhật trạng thái hàng đợi khám thành DONE
+                    let updatedQueueEntry: QueueEntry | null = null;
+                    if (appointment.queueEntry) {
+                        updatedQueueEntry = await tx.queueEntry.update({
+                            where: { appointmentId: id },
+                            data: {
+                                status: QueueStatus.DONE,
+                                completedAt: now,
+                            }
+                        });
+                    }
+
+                    // tạo hồ sơ bệnh án MedicalRecord
+                    const medicalRecord = await tx.medicalRecord.create({
+                        data: {
+                            appointmentId: id,
+                            patientId: appointment.patientId,
+                            doctorId: appointment.doctorId,
+                            diagnosis: completeDto.diagnosis,
+                            treatment: completeDto.treatment,
+                            prescription: completeDto.prescription || null,
+                            notes: completeDto.notes || null,
+                            followUpDate: completeDto.followUpDate ? new Date(completeDto.followUpDate) : null,
+                        }
+                    });
+
+                    // tính lại thời gian chờ của hàng đợi
+                    await this.queuesService.recalculateWaitTimes(tx, appointment.doctorId);
+
+                    return {
+                        message: 'hoàn thành khám bệnh và lập hồ sơ bệnh án thành công',
+                        data: {
+                            appointment: updatedAppointment,
+                            queueEntry: updatedQueueEntry,
+                            medicalRecord,
+                        }
                     };
                 });
             }

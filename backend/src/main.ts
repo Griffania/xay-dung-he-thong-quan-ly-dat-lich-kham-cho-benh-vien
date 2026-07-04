@@ -5,7 +5,6 @@ import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 
 async function bootstrap() {
-  // 1. KHỞI TẠO ỨNG DỤNG NESTJS
   const app = await NestFactory.create(AppModule);
 
   // 2. SETUP LOGGING (Sử dụng Winston Logger làm Logger hệ thống chính)

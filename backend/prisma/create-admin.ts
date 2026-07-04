@@ -22,7 +22,7 @@ async function main() {
   if (!email || !password || !fullName) {
     console.log('Vui lòng cung cấp thông tin tài khoản admin (hoặc nhấn Enter để dùng mặc định):');
     if (!email) {
-      email = await askQuestion('Email [admin@hospital.com]: ');
+      email = await askQuestion('Email [admin@gmail.com]: ');
       email = email.trim() || 'admin@hospital.com';
     }
     if (!password) {

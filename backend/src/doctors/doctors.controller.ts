@@ -60,6 +60,39 @@ export class DoctorsController {
     });
   }
   /**
+   * API lấy danh sách tất cả lịch hẹn được phân cho bác sĩ đăng nhập hôm nay
+   * Endpoint: GET /doctors/me/appointments/today
+   * Quyền truy cập: Chỉ dành cho DOCTOR
+   */
+  @Get('me/appointments/today')
+  @Roles(Role.DOCTOR)
+  getTodayAppointments(@Req() req: any, @Query('date') date?: string) {
+    return this.doctorsService.getTodayAppointments(req.user, date);
+  }
+
+  /**
+   * API lấy danh sách hàng đợi riêng của phòng bác sĩ đăng nhập hôm nay
+   * Endpoint: GET /doctors/me/queue
+   * Quyền truy cập: Chỉ dành cho DOCTOR
+   */
+  @Get('me/queue')
+  @Roles(Role.DOCTOR)
+  getDoctorQueue(@Req() req: any, @Query('date') date?: string) {
+    return this.doctorsService.getDoctorQueue(req.user, date);
+  }
+
+  /**
+   * API xem hồ sơ chi tiết của một bệnh nhân (bao gồm lịch sử bệnh án và lịch sử cuộc hẹn khám)
+   * Endpoint: GET /doctors/patients/:id
+   * Quyền truy cập: DOCTOR, RECEPTIONIST, ADMIN
+   */
+  @Get('patients/:id')
+  @Roles(Role.DOCTOR, Role.RECEPTIONIST, Role.ADMIN)
+  getPatientDetail(@Param('id') id: string) {
+    return this.doctorsService.getPatientDetail(id);
+  }
+
+  /**
    * Lấy chi tiết thông tin một bác sĩ theo ID
    * Quyền truy cập: Mọi tài khoản đã đăng nhập
    */

@@ -11,39 +11,54 @@ import {
   PlusCircle,
   HelpCircle,
   Building,
-  HeartPulse
+  HeartPulse,
+  AlertCircle,
+  XCircle,
+  RefreshCw
 } from 'lucide-react';
 
 interface Appointment {
   id: string;
-  doctorName: string;
-  specialty: string;
-  date: string;
-  time: string;
-  status: 'CONFIRMED' | 'PENDING' | 'COMPLETED';
+  doctor: {
+    user: {
+      fullName: string;
+    };
+    specialty: {
+      name: string;
+    };
+  };
+  slot: {
+    date: string;
+    startTime: string;
+    endTime: string;
+  };
+  status: 'PENDING' | 'CONFIRMED' | 'CHECKED_IN' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'NO_SHOW';
+  symptoms?: string;
+  createdAt: string;
 }
 
-interface PastRecord {
+interface MedicalRecord {
   id: string;
-  date: string;
-  doctor: string;
+  doctorName: string;
+  specialtyName: string;
   diagnosis: string;
   treatment: string;
-  prescription: string;
+  prescription?: string;
+  notes?: string;
+  followUpDate?: string;
+  createdAt: string;
 }
 
 export default function PatientDashboard() {
-  const [appointments, setAppointments] = useState<Appointment[]>([
-    { id: 'A-901', doctorName: 'BS. Lê Mạnh Cường', specialty: 'Khoa Tim Mạch', date: '08/06/2026', time: '09:00 - 09:30', status: 'CONFIRMED' },
-    { id: 'A-456', doctorName: 'BS. Nguyễn Văn Hùng', specialty: 'Khoa Nội', date: '20/05/2026', time: '14:30 - 15:00', status: 'COMPLETED' },
-  ]);
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  
+  // Danh sách lịch hẹn và bệnh án
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [pastRecords, setPastRecords] = useState<MedicalRecord[]>([]);
+  const [isApptsLoading, setIsApptsLoading] = useState(false);
+  const [isRecordsLoading, setIsRecordsLoading] = useState(false);
 
-  const pastRecords: PastRecord[] = [
-    { id: 'MR-019', date: '20/05/2026', doctor: 'BS. Nguyễn Văn Hùng', diagnosis: 'Trào ngược dạ dày thực quản cấp tính', treatment: 'Uống thuốc sau ăn, kiêng đồ chua cay, chất kích thích', prescription: 'Omeprazole 20mg (14 viên) - Uống 1 viên trước ăn sáng' },
-    { id: 'MR-008', date: '12/03/2026', doctor: 'BS. Lê Mạnh Cường', diagnosis: 'Rối loạn nhịp tim nhẹ do stress', treatment: 'Hạn chế caffein, làm việc điều độ, ngủ đủ giấc', prescription: 'Magnesium B6 (30 viên) - Uống 2 viên chia 2 lần/ngày' },
-  ];
-
-  // Trạng thái dữ liệu từ API
+  // Trạng thái dữ liệu từ API để đặt lịch
   const [specialtiesList, setSpecialtiesList] = useState<{ id: string; name: string }[]>([]);
   const [doctorsList, setDoctorsList] = useState<{ id: string; user: { fullName: string } }[]>([]);
   const [slotsList, setSlotsList] = useState<{ id: string; startTime: string; endTime: string }[]>([]);
@@ -53,15 +68,60 @@ export default function PatientDashboard() {
   const [selectedDoctorId, setSelectedDoctorId] = useState('');
   const [selectedDate, setSelectedDate] = useState('');
   const [selectedSlotId, setSelectedSlotId] = useState('');
+  const [symptoms, setSymptoms] = useState('');
   const [isBooking, setIsBooking] = useState(false);
   const [successBooking, setSuccessBooking] = useState<string | null>(null);
+  const [bookingError, setBookingError] = useState<string | null>(null);
+
+  // Đọc thông tin user từ localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const userStr = localStorage.getItem('user');
+      if (userStr) {
+        setCurrentUser(JSON.parse(userStr));
+      }
+    }
+  }, []);
+
+  // Tải danh sách lịch hẹn và bệnh án khi có thông tin user
+  const fetchAppointments = async () => {
+    setIsApptsLoading(true);
+    try {
+      const response = await api.get('/appointments?limit=50');
+      // Backend findAll trả về cấu trúc { data: appointments[], meta: ... }
+      setAppointments(response.data.data || response.data || []);
+    } catch (err) {
+      console.error('Lỗi khi tải lịch hẹn khám:', err);
+    } finally {
+      setIsApptsLoading(false);
+    }
+  };
+
+  const fetchMedicalRecords = async (patientId: string) => {
+    setIsRecordsLoading(true);
+    try {
+      const response = await api.get(`/medical-records/patient/${patientId}?limit=50`);
+      setPastRecords(response.data.data || response.data || []);
+    } catch (err) {
+      console.error('Lỗi khi tải bệnh án:', err);
+    } finally {
+      setIsRecordsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (currentUser?.id) {
+      fetchAppointments();
+      fetchMedicalRecords(currentUser.id);
+    }
+  }, [currentUser]);
 
   // Lấy danh sách chuyên khoa khi component mount
   useEffect(() => {
     const fetchSpecialties = async () => {
       try {
         const response = await api.get('/specialties?isActive=true&limit=100');
-        setSpecialtiesList(response.data.data || []);
+        setSpecialtiesList(response.data.data || response.data || []);
       } catch (err) {
         console.error('Lỗi khi lấy danh sách chuyên khoa:', err);
       }
@@ -71,15 +131,10 @@ export default function PatientDashboard() {
 
   // Lấy danh sách bác sĩ thuộc chuyên khoa được chọn
   useEffect(() => {
-    if (!selectedSpecialtyId) {
-      setDoctorsList([]);
-      setSelectedDoctorId('');
-      return;
-    }
     const fetchDoctors = async () => {
       try {
         const response = await api.get(`/doctors?specialtyId=${selectedSpecialtyId}&isActive=true&limit=100`);
-        setDoctorsList(response.data.data || []);
+        setDoctorsList(response.data.data || response.data || []);
         setSelectedDoctorId('');
       } catch (err) {
         console.error('Lỗi khi lấy danh sách bác sĩ:', err);
@@ -90,14 +145,9 @@ export default function PatientDashboard() {
 
   // Lấy danh sách khung giờ trống của bác sĩ theo ngày
   useEffect(() => {
-    if (!selectedDoctorId || !selectedDate) {
-      setSlotsList([]);
-      setSelectedSlotId('');
-      return;
-    }
     const fetchSlots = async () => {
       try {
-        const response = await api.get(`/slots/available?doctorId=${selectedDoctorId}&date=${selectedDate}`);
+        const response = await api.get(`/doctors/${selectedDoctorId}/slots/available?date=${selectedDate}`);
         setSlotsList(response.data || []);
         setSelectedSlotId('');
       } catch (err) {
@@ -107,186 +157,252 @@ export default function PatientDashboard() {
     fetchSlots();
   }, [selectedDoctorId, selectedDate]);
 
-  // Helper định dạng giờ từ chuỗi ISO trả về từ Prisma (mốc 1970-01-01 UTC)
+  // Định dạng hiển thị giờ từ chuỗi ISO UTC (Ví dụ: "1970-01-01T08:30:00.000Z" -> "08:30")
   const formatSlotTime = (isoTimeStr: string) => {
-    const dateObj = new Date(isoTimeStr);
-    const hours = String(dateObj.getUTCHours()).padStart(2, '0');
-    const minutes = String(dateObj.getUTCMinutes()).padStart(2, '0');
-    return `${hours}:${minutes}`;
+    try {
+      const dateObj = new Date(isoTimeStr);
+      const hours = String(dateObj.getUTCHours()).padStart(2, '0');
+      const minutes = String(dateObj.getUTCMinutes()).padStart(2, '0');
+      return `${hours}:${minutes}`;
+    } catch {
+      return '';
+    }
   };
 
   const displayTimeRange = (start: string, end: string) => {
     return `${formatSlotTime(start)} - ${formatSlotTime(end)}`;
   };
 
-  const handleBook = (e: React.FormEvent) => {
+  const formatDate = (dateStr: string) => {
+    try {
+      const d = new Date(dateStr);
+      return d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    } catch {
+      return dateStr;
+    }
+  };
+
+  // Hủy lịch hẹn
+  const handleCancelAppointment = async (apptId: string) => {
+    if (!window.confirm('Bạn có chắc chắn muốn hủy lịch hẹn khám này?')) return;
+    try {
+      await api.patch(`/appointments/${apptId}/cancel`);
+      fetchAppointments();
+      if (currentUser?.id) {
+        fetchMedicalRecords(currentUser.id);
+      }
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Không thể hủy lịch khám lúc này!');
+    }
+  };
+
+  // Đăng ký đặt lịch khám
+  const handleBook = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedSpecialtyId || !selectedDoctorId || !selectedDate || !selectedSlotId) return;
+    if (!selectedSlotId) return;
 
     setIsBooking(true);
-    setTimeout(() => {
+    setSuccessBooking(null);
+    setBookingError(null);
+
+    try {
+      await api.post('/appointments', {
+        slotId: selectedSlotId,
+        symptoms: symptoms || undefined
+      });
+
       const docName = doctorsList.find(d => d.id === selectedDoctorId)?.user.fullName || 'Bác sĩ';
-      const specName = specialtiesList.find(s => s.id === selectedSpecialtyId)?.name || 'Chuyên khoa';
       const chosenSlot = slotsList.find(s => s.id === selectedSlotId);
       const slotTimeStr = chosenSlot ? displayTimeRange(chosenSlot.startTime, chosenSlot.endTime) : '';
 
-      const newAppt: Appointment = {
-        id: `A-${Math.floor(Math.random() * 800) + 100}`,
-        doctorName: docName,
-        specialty: specName,
-        date: selectedDate.split('-').reverse().join('/'), // Convert YYYY-MM-DD to DD/MM/YYYY
-        time: slotTimeStr,
-        status: 'PENDING'
-      };
-
-      setAppointments(prev => [newAppt, ...prev]);
-      setSuccessBooking(`Đăng ký đặt lịch khám thành công với ${docName} lúc ${slotTimeStr} ngày ${newAppt.date}. Vui lòng chờ xác nhận.`);
+      setSuccessBooking(`Đăng ký thành công cuộc hẹn khám với ${docName} lúc ${slotTimeStr} ngày ${selectedDate.split('-').reverse().join('/')}. Vui lòng chờ xác nhận.`);
       
       // Reset form
       setSelectedSpecialtyId('');
       setSelectedDoctorId('');
       setSelectedDate('');
       setSelectedSlotId('');
+      setSymptoms('');
+      
+      fetchAppointments();
+    } catch (err: any) {
+      const message = err.response?.data?.message || 'Đặt lịch hẹn thất bại. Vui lòng kiểm tra lại!';
+      setBookingError(Array.isArray(message) ? message[0] : message);
+    } finally {
       setIsBooking(false);
-    }, 800);
+    }
   };
 
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-5 duration-500">
+    <div className="flex flex-col gap-6">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-black bg-gradient-to-r from-white via-slate-200 to-indigo-400 bg-clip-text text-transparent">
-          Cổng Dịch Vụ Bệnh Nhân
-        </h1>
-        <p className="text-slate-400 mt-1">Đặt lịch hẹn khám bệnh trực tuyến, theo dõi tiến độ và xem lại bệnh án cá nhân</p>
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="font-black text-slate-808" style={{ fontSize: '1.875rem' }}>
+            Cổng Dịch Vụ Bệnh Nhân
+          </h1>
+        </div>
+        <button 
+          onClick={() => {
+            fetchAppointments();
+            if (currentUser?.id) fetchMedicalRecords(currentUser.id);
+          }}
+          className="btn btn-secondary"
+          style={{ padding: '0.625rem' }}
+        >
+          <RefreshCw style={{ width: '1.25rem', height: '1.25rem' }} />
+        </button>
       </div>
 
       {/* Stats row */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="p-6 bg-slate-900/40 border border-slate-800/80 rounded-3xl flex items-center justify-between shadow-lg">
+      <div className="stats-grid stats-grid-3">
+        <div className="stats-card">
           <div>
-            <span className="text-slate-400 text-xs font-semibold uppercase block">Lịch Hẹn Sắp Tới</span>
-            <span className="text-lg font-bold text-white mt-1 block">
-              {appointments.find(a => a.status === 'CONFIRMED') ? '08/06/2026 (09:00)' : 'Chưa có lịch hẹn'}
+            <span className="stats-title uppercase">Lịch khám kế tiếp</span>
+            <span className="stats-value" style={{ fontSize: '0.875rem', fontWeight: 800, color: 'var(--color-primary)' }}>
+              {appointments.find(a => a.status === 'CONFIRMED') 
+                ? `${formatDate(appointments.find(a => a.status === 'CONFIRMED')!.slot.date)}`
+                : 'Chưa có lịch hẹn'}
             </span>
           </div>
-          <div className="w-12 h-12 bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 rounded-2xl flex items-center justify-center">
-            <Calendar className="w-6 h-6" />
+          <div className="stats-icon-box stats-icon-blue">
+            <Calendar style={{ width: '1.5rem', height: '1.5rem' }} />
           </div>
         </div>
 
-        <div className="p-6 bg-slate-900/40 border border-slate-800/80 rounded-3xl flex items-center justify-between shadow-lg">
+        <div className="stats-card">
           <div>
-            <span className="text-slate-400 text-xs font-semibold uppercase block">Số Ca Khám Đã Đặt</span>
-            <span className="text-3xl font-black text-emerald-400 mt-1 block">{appointments.length}</span>
+            <span className="stats-title uppercase">Tổng ca khám đã đăng ký</span>
+            <span className="stats-value" style={{ color: 'var(--color-success)' }}>{appointments.length}</span>
           </div>
-          <div className="w-12 h-12 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-2xl flex items-center justify-center">
-            <CheckCircle className="w-6 h-6" />
+          <div className="stats-icon-box stats-icon-emerald">
+            <CheckCircle style={{ width: '1.5rem', height: '1.5rem' }} />
           </div>
         </div>
 
-        <div className="p-6 bg-slate-900/40 border border-slate-800/80 rounded-3xl flex items-center justify-between shadow-lg">
+        <div className="stats-card">
           <div>
-            <span className="text-slate-400 text-xs font-semibold uppercase block">Hồ Sơ Y Khoa Của Tôi</span>
-            <span className="text-3xl font-black text-purple-400 mt-1 block">{pastRecords.length} bệnh án</span>
+            <span className="stats-title uppercase">Lịch sử bệnh án cá nhân</span>
+            <span className="stats-value" style={{ color: 'var(--color-warning)' }}>{pastRecords.length} bệnh án</span>
           </div>
-          <div className="w-12 h-12 bg-purple-500/10 border border-purple-500/20 text-purple-400 rounded-2xl flex items-center justify-center">
-            <FileText className="w-6 h-6" />
+          <div className="stats-icon-box stats-icon-purple">
+            <FileText style={{ width: '1.5rem', height: '1.5rem' }} />
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
+      <div className="grid grid-cols-1 grid-cols-lg-5 gap-8">
         {/* Left Column: Booking Form */}
-        <div className="lg:col-span-2 space-y-4">
-          <div className="p-6 bg-slate-900/40 border border-slate-800/80 rounded-3xl shadow-xl space-y-4">
-            <h2 className="text-lg font-bold text-white flex items-center gap-2">
-              <PlusCircle className="w-5 h-5 text-indigo-400" />
-              Đặt lịch hẹn mới
+        <div className="col-span-2 flex flex-col gap-4">
+          <div className="panel-card p-6 flex flex-col gap-4">
+            <h2 className="panel-title flex items-center gap-2">
+              <PlusCircle style={{ width: '1.25rem', height: '1.25rem', color: 'var(--color-primary)' }} />
+              Đặt lịch hẹn khám trực tuyến
             </h2>
 
             {successBooking && (
-              <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs font-semibold rounded-xl flex items-start gap-2">
-                <CheckCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <div className="alert alert-success" style={{ padding: '0.75rem', fontSize: '0.75rem' }}>
+                <CheckCircle style={{ width: '1rem', height: '1rem', marginTop: '2px' }} />
                 <span>{successBooking}</span>
               </div>
             )}
 
-            <form onSubmit={handleBook} className="space-y-3.5">
+            {bookingError && (
+              <div className="alert alert-error" style={{ padding: '0.75rem', fontSize: '0.75rem' }}>
+                <AlertCircle style={{ width: '1rem', height: '1rem', marginTop: '2px' }} />
+                <span>{bookingError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleBook} className="flex flex-col gap-4">
               {/* Specialty Select */}
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-350 block">Chọn chuyên khoa khám</label>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label uppercase">Chọn chuyên khoa</label>
                 <select
                   required
                   value={selectedSpecialtyId}
                   onChange={(e) => setSelectedSpecialtyId(e.target.value)}
-                  className="w-full px-3 py-2.5 bg-slate-950/40 border border-slate-800 focus:border-indigo-500 rounded-xl text-white outline-none transition-all text-xs"
+                  className="select-control w-full"
                 >
-                  <option value="" disabled className="bg-slate-950">-- Chọn chuyên khoa --</option>
+                  <option value="" disabled>-- Chọn chuyên khoa khám --</option>
                   {specialtiesList.map(s => (
-                    <option key={s.id} value={s.id} className="bg-slate-950 text-slate-300">{s.name}</option>
+                    <option key={s.id} value={s.id}>{s.name}</option>
                   ))}
                 </select>
               </div>
 
               {/* Doctor Select */}
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-350 block">Bác sĩ phụ trách</label>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label uppercase">Chọn Bác sĩ phụ trách</label>
                 <select
                   required
                   disabled={!selectedSpecialtyId}
                   value={selectedDoctorId}
                   onChange={(e) => setSelectedDoctorId(e.target.value)}
-                  className="w-full px-3 py-2.5 bg-slate-950/40 border border-slate-800 focus:border-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl text-white outline-none transition-all text-xs"
+                  className="select-control w-full"
                 >
-                  <option value="" disabled className="bg-slate-950">-- Chọn bác sĩ --</option>
+                  <option value="" disabled>-- Chọn bác sĩ khám bệnh --</option>
                   {doctorsList.map(d => (
-                    <option key={d.id} value={d.id} className="bg-slate-950 text-slate-300">{d.user.fullName}</option>
+                    <option key={d.id} value={d.id}>{d.user.fullName}</option>
                   ))}
                 </select>
               </div>
 
               {/* Date selection */}
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-350 block">Ngày đặt khám</label>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label uppercase">Ngày đăng ký khám</label>
                 <input
                   type="date"
                   required
                   value={selectedDate}
                   min={new Date().toISOString().split('T')[0]}
                   onChange={(e) => setSelectedDate(e.target.value)}
-                  className="w-full px-3 py-2.5 bg-slate-950/40 border border-slate-800 focus:border-indigo-500 rounded-xl text-white outline-none transition-all text-xs"
+                  className="input-control"
+                  style={{ paddingLeft: '1rem' }}
                 />
               </div>
 
               {/* Slot select */}
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-350 block">Chọn khung giờ khám</label>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label uppercase">Chọn khung giờ khám trống</label>
                 <select
                   required
                   disabled={!selectedDate || !selectedDoctorId}
                   value={selectedSlotId}
                   onChange={(e) => setSelectedSlotId(e.target.value)}
-                  className="w-full px-3 py-2.5 bg-slate-950/40 border border-slate-800 focus:border-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl text-white outline-none transition-all text-xs"
+                  className="select-control w-full"
                 >
-                  <option value="" disabled className="bg-slate-950">-- Chọn giờ --</option>
+                  <option value="" disabled>-- Chọn giờ khám --</option>
                   {slotsList.map(s => (
-                    <option key={s.id} value={s.id} className="bg-slate-950 text-slate-300">
+                    <option key={s.id} value={s.id}>
                       {displayTimeRange(s.startTime, s.endTime)}
                     </option>
                   ))}
                   {selectedDate && selectedDoctorId && slotsList.length === 0 && (
-                    <option value="" disabled className="bg-slate-950 text-amber-400">
-                      Không có ca khám khả dụng
+                    <option value="" disabled style={{ color: 'var(--color-warning)' }}>
+                      Bác sĩ không có ca khám khả dụng ngày này
                     </option>
                   )}
                 </select>
               </div>
 
+              {/* Symptoms description */}
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label uppercase">Mô tả triệu chứng bệnh lý</label>
+                <textarea
+                  value={symptoms}
+                  onChange={(e) => setSymptoms(e.target.value)}
+                  placeholder="Nhập triệu chứng của bạn (Ví dụ: đau họng, sốt nhẹ, đau đầu từ hôm qua...)"
+                  rows={2}
+                  className="emr-textarea"
+                />
+              </div>
+
               <button
                 type="submit"
-                disabled={isBooking}
-                className="w-full py-3 px-4 bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white font-bold rounded-xl transition-all text-xs cursor-pointer shadow-lg shadow-indigo-950/40"
+                disabled={isBooking || !selectedSlotId}
+                className="btn btn-primary w-full"
+                style={{ padding: '0.75rem' }}
               >
                 {isBooking ? 'Đang gửi đăng ký...' : 'Xác nhận đặt lịch hẹn'}
               </button>
@@ -295,60 +411,115 @@ export default function PatientDashboard() {
         </div>
 
         {/* Right Column: Appointment List & Health Record history */}
-        <div className="lg:col-span-3 space-y-6">
+        <div className="col-span-3 flex flex-col gap-6">
           {/* Upcoming & All booked list */}
-          <div className="p-6 bg-slate-900/40 border border-slate-800/80 rounded-3xl shadow-xl space-y-4">
-            <h2 className="text-lg font-bold text-white flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-indigo-400" />
+          <div className="panel-card p-6 flex flex-col gap-4">
+            <h2 className="panel-title flex items-center gap-2">
+              <Calendar style={{ width: '1.25rem', height: '1.25rem', color: 'var(--color-primary)' }} />
               Lịch khám hẹn của tôi
             </h2>
-            <div className="space-y-3">
-              {appointments.map((a) => (
-                <div key={a.id} className="p-4 bg-slate-950/40 border border-slate-850 rounded-2xl flex justify-between items-center gap-4">
-                  <div>
-                    <h3 className="font-bold text-white text-sm">{a.doctorName}</h3>
-                    <p className="text-xs text-slate-500 mt-1">{a.specialty}</p>
-                    <div className="flex gap-4 mt-2 text-xs text-slate-400">
-                      <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" /> {a.date}</span>
-                      <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> {a.time}</span>
+            
+            {isApptsLoading ? (
+              <div className="fallback-loader" style={{ minHeight: '15vh' }}>
+                <div className="spinner"></div>
+              </div>
+            ) : appointments.length === 0 ? (
+              <p className="text-slate-400 text-xs text-center py-6">Bạn chưa đăng ký lịch khám bệnh nào.</p>
+            ) : (
+              <div className="flex flex-col gap-3" style={{ maxHeight: '300px', overflowY: 'auto', paddingRight: '0.25rem' }}>
+                {appointments.map((a) => (
+                  <div key={a.id} style={{ padding: '1rem', borderRadius: 'var(--radius-xl)', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-light)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem' }}>
+                    <div>
+                      <h3 className="font-bold text-slate-808" style={{ fontSize: '0.75rem' }}>{a.doctor.user.fullName}</h3>
+                      <p style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '0.25rem', fontWeight: 600, textTransform: 'uppercase' }}>{a.doctor.specialty.name}</p>
+                      <div className="flex gap-4 mt-2 font-medium" style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                        <span className="flex items-center gap-1"><Calendar style={{ width: '0.875rem', height: '0.875rem' }} /> {formatDate(a.slot.date)}</span>
+                        <span className="flex items-center gap-1"><Clock style={{ width: '0.875rem', height: '0.875rem' }} /> {displayTimeRange(a.slot.startTime, a.slot.endTime)}</span>
+                      </div>
+                      {a.symptoms && (
+                        <p className="line-clamp-1 italic" style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '0.25rem' }}>Triệu chứng: {a.symptoms}</p>
+                      )}
+                    </div>
+                    
+                    <div className="flex flex-col items-end gap-2">
+                      <span className={`badge ${
+                        a.status === 'CONFIRMED' ? 'badge-admin' :
+                        a.status === 'COMPLETED' ? '' :
+                        a.status === 'PENDING' ? 'badge-receptionist' :
+                        a.status === 'CHECKED_IN' ? 'badge-patient' :
+                        a.status === 'IN_PROGRESS' ? 'badge-doctor' :
+                        'badge-danger'
+                      }`}>
+                        {a.status === 'CONFIRMED' ? 'ĐÃ XÁC NHẬN' : 
+                         a.status === 'COMPLETED' ? 'ĐÃ KHÁM XONG' : 
+                         a.status === 'PENDING' ? 'ĐANG CHỜ DUYỆT' : 
+                         a.status === 'CHECKED_IN' ? 'ĐÃ CHECK-IN' :
+                         a.status === 'IN_PROGRESS' ? 'ĐANG KHÁM' :
+                         a.status === 'CANCELLED' ? 'ĐÃ HỦY' : 'VẮNG KHÁM'}
+                      </span>
+
+                      {(a.status === 'PENDING' || a.status === 'CONFIRMED') && (
+                        <button
+                          onClick={() => handleCancelAppointment(a.id)}
+                          style={{ color: 'var(--color-danger)', fontSize: '0.75rem', fontWeight: 700, border: 'none', background: 'none', cursor: 'pointer', padding: 0 }}
+                        >
+                          Hủy lịch
+                        </button>
+                      )}
                     </div>
                   </div>
-                  <span className={`px-2.5 py-0.5 border text-[10px] font-bold rounded-full uppercase tracking-wider ${
-                    a.status === 'CONFIRMED' ? 'bg-indigo-500/10 border-indigo-500/25 text-indigo-400' :
-                    a.status === 'COMPLETED' ? 'bg-slate-800 border-slate-700 text-slate-400' :
-                    'bg-amber-500/10 border-amber-500/25 text-amber-300'
-                  }`}>
-                    {a.status === 'CONFIRMED' ? 'ĐÃ XÁC NHẬN' : a.status === 'COMPLETED' ? 'ĐÃ KHÁM' : 'ĐANG CHỜ'}
-                  </span>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Past Health Records */}
-          <div className="p-6 bg-slate-900/40 border border-slate-800/80 rounded-3xl shadow-xl space-y-4">
-            <h2 className="text-lg font-bold text-white flex items-center gap-2">
-              <FileText className="w-5 h-5 text-purple-400" />
+          <div className="panel-card p-6 flex flex-col gap-4">
+            <h2 className="panel-title flex items-center gap-2">
+              <FileText style={{ width: '1.25rem', height: '1.25rem', color: 'var(--color-primary)' }} />
               Hồ sơ bệnh án cá nhân
             </h2>
-            <div className="space-y-4">
-              {pastRecords.map((r) => (
-                <div key={r.id} className="p-4 bg-slate-950/40 border border-slate-850 rounded-2xl space-y-2">
-                  <div className="flex justify-between items-center pb-2 border-b border-slate-800/60">
-                    <div>
-                      <span className="text-[10px] text-slate-500 font-semibold uppercase">Lịch sử khám ngày {r.date}</span>
-                      <h4 className="font-bold text-sm text-white mt-0.5">{r.doctor}</h4>
+
+            {isRecordsLoading ? (
+              <div className="fallback-loader" style={{ minHeight: '15vh' }}>
+                <div className="spinner"></div>
+              </div>
+            ) : pastRecords.length === 0 ? (
+              <p className="text-slate-400 text-xs text-center py-6">Bạn chưa có hồ sơ bệnh án nào trên hệ thống.</p>
+            ) : (
+              <div className="flex flex-col gap-4" style={{ maxHeight: '350px', overflowY: 'auto', paddingRight: '0.25rem' }}>
+                {pastRecords.map((r) => (
+                  <div key={r.id} style={{ padding: '1rem', borderRadius: 'var(--radius-xl)', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-light)', display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
+                      <div>
+                        <span style={{ fontSize: '9px', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Lịch sử khám ngày {formatDate(r.createdAt)}</span>
+                        <h4 className="font-bold text-slate-808 mt-0.5" style={{ fontSize: '0.75rem' }}>{r.doctorName}</h4>
+                        <p style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '0.125rem', fontWeight: 600, textTransform: 'uppercase' }}>{r.specialtyName}</p>
+                      </div>
+                      <span className="badge badge-admin">BỆNH ÁN</span>
                     </div>
-                    <span className="text-xs text-indigo-400 font-semibold">{r.id}</span>
+                    <div style={{ fontSize: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+                      <p><strong className="text-slate-800">Chẩn đoán bệnh:</strong> {r.diagnosis}</p>
+                      <p><strong className="text-slate-800">Phương pháp điều trị:</strong> {r.treatment}</p>
+                      {r.prescription && (
+                        <p>
+                          <strong className="text-slate-800">Đơn thuốc chỉ định:</strong>{' '}
+                          <span style={{ fontFamily: 'monospace', color: 'var(--color-success)', fontWeight: 700, backgroundColor: 'rgba(16, 185, 129, 0.08)', padding: '0.125rem 0.25rem', borderRadius: 'var(--radius-sm)' }}>
+                            {r.prescription}
+                          </span>
+                        </p>
+                      )}
+                      {r.notes && (
+                        <p><strong className="text-slate-500 italic">Lời dặn của bác sĩ:</strong> <span className="italic text-slate-500">{r.notes}</span></p>
+                      )}
+                      {r.followUpDate && (
+                        <p style={{ color: 'var(--color-warning)', fontWeight: 700 }}><strong className="text-slate-800">Hẹn ngày tái khám:</strong> {formatDate(r.followUpDate)}</p>
+                      )}
+                    </div>
                   </div>
-                  <div className="text-xs space-y-1">
-                    <p className="text-slate-400"><strong className="text-slate-300">Chẩn đoán:</strong> {r.diagnosis}</p>
-                    <p className="text-slate-400"><strong className="text-slate-300">Phương pháp điều trị:</strong> {r.treatment}</p>
-                    <p className="text-slate-400"><strong className="text-slate-300">Đơn thuốc:</strong> <span className="font-mono text-emerald-300">{r.prescription}</span></p>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>

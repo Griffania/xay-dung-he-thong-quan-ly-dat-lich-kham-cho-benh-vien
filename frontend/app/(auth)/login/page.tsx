@@ -96,35 +96,34 @@ export default function LoginPage() {
 
   return (
     <>
-      {/* Brand Header */}
-      <div className="flex flex-col items-center mb-8">
-        <div className="w-14 h-14 bg-gradient-to-tr from-indigo-500/10 to-purple-500/10 border border-indigo-500/20 rounded-2xl flex items-center justify-center mb-4 shadow-inner">
-          <ShieldCheck className="w-7 h-7 text-indigo-400 animate-pulse" />
+      {/*header trang đăng nhập*/}
+      <div className="auth-header">
+        <div className="logo-box">
+          <ShieldCheck className="text-primary" style={{ width: '1.75rem', height: '1.75rem' }} />
         </div>
-        <h1 className="text-2xl font-bold bg-gradient-to-r from-white via-slate-100 to-slate-300 bg-clip-text text-transparent tracking-tight">
-          Hệ thống Y tế Clinic
+        <h1 className="auth-title">
+          ĐĂNG NHẬP
         </h1>
-        <p className="text-slate-400 text-sm mt-1.5 font-medium">Đăng nhập cổng quản trị viên & nhân viên</p>
       </div>
 
       {/* Error Alert from Server */}
       {error && (
-        <div className="mb-6 p-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl flex items-start gap-3 animate-in fade-in slide-in-from-top-3 duration-300">
-          <AlertCircle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
-          <p className="text-rose-200 text-sm leading-relaxed">{error}</p>
+        <div className="alert alert-error">
+          <AlertCircle className="shrink-0 text-danger" style={{ width: '1.25rem', height: '1.25rem', marginTop: '2px' }} />
+          <p>{error}</p>
         </div>
       )}
 
-      {/* Login Form */}
-      <form onSubmit={handleSubmit} className="space-y-5">
-        {/* Email field */}
-        <div className="space-y-1.5">
-          <label className="text-sm font-semibold text-slate-300 block" htmlFor="email">
-            Địa chỉ Email
+      {/* form đăng nhập */}
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        {/* ô nhập vào email đăng nhập */}
+        <div className="form-group">
+          <label className="form-label" htmlFor="email">
+            Email
           </label>
-          <div className="relative group">
-            <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-slate-500 group-focus-within:text-indigo-400 transition-colors">
-              <Mail className="w-5 h-5" />
+          <div className="input-wrapper">
+            <span className="input-icon-left">
+              <Mail style={{ width: '1.25rem', height: '1.25rem' }} />
             </span>
             <input
               id="email"
@@ -136,27 +135,25 @@ export default function LoginPage() {
                 if (emailError) validateEmail(e.target.value);
               }}
               onBlur={(e) => validateEmail(e.target.value)}
-              placeholder="bacsi@clinic.com"
-              className={`w-full pl-11 pr-4 py-3 bg-slate-950/40 border ${
-                emailError ? 'border-rose-500/50 focus:ring-rose-500/20' : 'border-slate-800/80 focus:border-indigo-500 focus:ring-indigo-500/20'
-              } focus:ring-4 rounded-2xl text-white placeholder-slate-600 outline-none transition-all duration-200`}
+              placeholder="...@gmail.com"
+              className={`input-control ${emailError ? 'error' : ''}`}
             />
           </div>
           {emailError && (
-            <p className="text-rose-400 text-xs mt-1 flex items-center gap-1 animate-in fade-in duration-200">
-              <AlertCircle className="w-3.5 h-3.5" /> {emailError}
+            <p className="form-error-msg">
+              <AlertCircle style={{ width: '0.875rem', height: '0.875rem' }} /> {emailError}
             </p>
           )}
         </div>
 
-        {/* Password field */}
-        <div className="space-y-1.5">
-          <label className="text-sm font-semibold text-slate-300 block" htmlFor="password">
+        {/* ô nhập vào mật khẩu */}
+        <div className="form-group">
+          <label className="form-label" htmlFor="password">
             Mật khẩu
           </label>
-          <div className="relative group">
-            <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-slate-500 group-focus-within:text-indigo-400 transition-colors">
-              <Lock className="w-5 h-5" />
+          <div className="input-wrapper">
+            <span className="input-icon-left">
+              <Lock style={{ width: '1.25rem', height: '1.25rem' }} />
             </span>
             <input
               id="password"
@@ -169,55 +166,51 @@ export default function LoginPage() {
               }}
               onBlur={(e) => validatePassword(e.target.value)}
               placeholder="••••••••"
-              className={`w-full pl-11 pr-11 py-3 bg-slate-950/40 border ${
-                passwordError ? 'border-rose-500/50 focus:ring-rose-500/20' : 'border-slate-800/80 focus:border-indigo-500 focus:ring-indigo-500/20'
-              } focus:ring-4 rounded-2xl text-white placeholder-slate-600 outline-none transition-all duration-200`}
+              className={`input-control ${passwordError ? 'error' : ''}`}
             />
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
-              className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-500 hover:text-slate-300 focus:outline-none transition-colors"
+              className="input-icon-right"
             >
-              {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              {showPassword ? <EyeOff style={{ width: '1.25rem', height: '1.25rem' }} /> : <Eye style={{ width: '1.25rem', height: '1.25rem' }} />}
             </button>
           </div>
           {passwordError && (
-            <p className="text-rose-400 text-xs mt-1 flex items-center gap-1 animate-in fade-in duration-200">
-              <AlertCircle className="w-3.5 h-3.5" /> {passwordError}
+            <p className="form-error-msg">
+              <AlertCircle style={{ width: '0.875rem', height: '0.875rem' }} /> {passwordError}
             </p>
           )}
         </div>
 
-        {/* Remember & Forgot */}
-        <div className="flex items-center justify-between text-sm pt-1">
-          <label className="flex items-center gap-2.5 text-slate-400 select-none cursor-pointer group hover:text-slate-300 transition-colors">
-            <input
-              type="checkbox"
-              className="w-4.5 h-4.5 rounded-lg border-slate-800 bg-slate-950/40 text-indigo-600 focus:ring-indigo-500/20 focus:ring-offset-0 outline-none cursor-pointer"
-            />
-            <span className="text-sm font-medium">Ghi nhớ đăng nhập</span>
-          </label>
-          <a href="#" className="text-indigo-400 hover:text-indigo-300 hover:underline transition-all font-semibold">
-            Quên mật khẩu?
-          </a>
-        </div>
-
-        {/* Submit Button */}
+        {/* nút đăng nhập*/}
         <button
           type="submit"
           disabled={isLoading}
-          className="w-full mt-2 py-3.5 px-4 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 active:scale-[0.98] disabled:opacity-50 text-white font-semibold rounded-2xl flex items-center justify-center gap-2 shadow-xl shadow-indigo-600/25 hover:shadow-indigo-600/35 transition-all duration-200 cursor-pointer"
+          className="btn btn-primary w-full mt-2"
         >
           {isLoading ? (
-            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+            <div className="spinner" style={{ width: '1.25rem', height: '1.25rem', margin: 0 }}></div>
           ) : (
             <>
-              <LogIn className="w-5 h-5" />
-              <span>Đăng nhập hệ thống</span>
+              <LogIn style={{ width: '1.25rem', height: '1.25rem' }} />
+              <span>Đăng nhập</span>
             </>
           )}
         </button>
       </form>
+
+      {/* link tới trang đăng ký nếu như chưa có tài khoản */}
+      <div className="text-center mt-6 text-slate-500" style={{ fontSize: '0.75rem' }}>
+        Bạn là chưa có tài khoản?{' '}
+        <a 
+          href="/register" 
+          className="link-btn"
+        >
+          Đăng ký tài khoản mới
+        </a>
+      </div>
     </>
   );
 }
+

@@ -31,7 +31,6 @@ Backend được viết dựa trên framework **NestJS** theo cấu trúc mô-đ
     *   `Appointment`: Lịch hẹn khám (Thực thể trung tâm kết nối Patient, Doctor, và Slot).
     *   `QueueEntry`: Hàng đợi khám thực tế tại phòng khám sau khi bệnh nhân check-in.
     *   `MedicalRecord`: Bệnh án của bệnh nhân do bác sĩ lập sau ca khám.
-    *   `AuditLog`: Nhật ký ghi lại lịch sử các thao tác thay đổi dữ liệu của hệ thống để phục vụ bảo mật thông tin y tế.
 
 ### 2.2. Mã nguồn ứng dụng chính (`/backend/src`)
 *   [main.ts](file:///d:/Study/project/Luận văn tốt nghiệp/Project_LVTN/backend/src/main.ts): File điểm đầu vào (Entry point) khởi tạo ứng dụng NestJS. Cấu hình CORS, tiền tố API `/api`, tích hợp Winston Logger toàn cục, thiết lập `ValidationPipe` toàn cục (để validate dữ liệu đầu vào DTO) và `AllExceptionsFilter` toàn cục (để bắt lỗi).
