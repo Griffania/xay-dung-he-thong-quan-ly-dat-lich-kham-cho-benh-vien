@@ -12,6 +12,7 @@ import { WorkSchedulesModule } from './work-schedules/work-schedules.module';
 import { SlotsModule } from './slots/slots.module';
 import { AppointmentsModule } from './appointments/appointments.module';
 import { QueuesModule } from './queues/queues.module';
+import { MedicalRecordsModule } from './medical-records/medical-records.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { QueuesModule } from './queues/queues.module';
     SlotsModule,
     AppointmentsModule,
     QueuesModule,
+    MedicalRecordsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

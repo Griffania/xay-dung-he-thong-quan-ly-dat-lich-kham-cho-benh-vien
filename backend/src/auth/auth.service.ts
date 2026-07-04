@@ -31,19 +31,15 @@ export class AuthService {
     return bcrypt.compare(password, hash);
   }
 
-  //Đăng ký tài khoản: Mã hóa mật khẩu mới và lưu thông tin người dùng vào database.
   async register(registerDto: RegisterDto) {
     const { email, password, fullName, phone, birthDate } = registerDto;
-    // Kiểm tra xem email đã được sử dụng chưa
     const existingUser = await this.prisma.user.findUnique({
       where: { email },
     });
     if (existingUser) {
       throw new ConflictException('Email này đã được sử dụng!');
     }
-    // Băm mật khẩu trước khi lưu vào cơ sở dữ liệu
     const hashedPassword = await this.hashPassword(password);
-    // Lưu User mới vào database
     const user = await this.prisma.user.create({
       data: {
         email,
@@ -60,9 +56,7 @@ export class AuthService {
     };
   }
 
-  // Sinh bộ đôi token (AT và RT): Ký số (sign) thông tin người dùng (payload) với khóa tương ứng.
   async generateTokens(payload: { sub: string; email: string; role: string }) {
-    // Tạo Access Token
     const accessSecret =
       this.configService.get<string>('JWT_ACCESS_SECRET') ||
       'default_access_secret_123';
@@ -73,7 +67,6 @@ export class AuthService {
       this.configService.get<string>('JWT_ACCESS_EXPIRATION') || '15m';
     const refreshExpiration =
       this.configService.get<string>('JWT_REFRESH_EXPIRATION') || '7d';
-    // Tạo Refresh Token
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, {
         secret: accessSecret,
@@ -84,7 +77,6 @@ export class AuthService {
         expiresIn: refreshExpiration as any,
       }),
     ]);
-    // Băm Refresh Token trước khi lưu vào DB để đảm bảo an toàn bảo mật thông tin
     const hashedRefreshToken = await this.hashPassword(refreshToken);
     await this.prisma.user.update({
       where: { id: payload.sub },
@@ -97,34 +89,30 @@ export class AuthService {
       refreshToken,
     };
   }
-  // Đăng nhập: Kiểm tra thông tin, sinh token và trả về thông tin user cùng token.
+
   async login(loginDto: LoginDto) {
     const { email, password } = loginDto;
-    // Lấy thông tin user dựa theo email
     const user = await this.prisma.user.findUnique({
       where: { email },
       include: { role: true },
     });
     if (!user) {
       throw new UnauthorizedException(
-        'Tài khoản hoặc mật khẩu không chính xác!',
+        'Tài khoản Không tồn tại',
       );
     }
-    // Kiểm tra xem tài khoản có bị khóa không
     if (user.status === 'LOCKED') {
       throw new UnauthorizedException('Tài khoản này đã bị khóa!');
     }
-    // So sánh mật khẩu
     const isPasswordValid = await this.comparePassword(
       password,
       user.passwordHash,
     );
     if (!isPasswordValid) {
       throw new UnauthorizedException(
-        'Tài khoản hoặc mật khẩu không chính xác!',
+        'mật khẩu không chính xác!',
       );
     }
-    // Tạo token và trả về thông tin đăng nhập
     const tokens = await this.generateTokens({
       sub: user.id,
       email: user.email,
@@ -140,9 +128,8 @@ export class AuthService {
       ...tokens,
     };
   }
-  // Refresh Token mới: Dùng Refresh Token hợp lệ gửi lên để cấp lại một cặp Access Token & Refresh Token hoàn toàn mới.
+
   async refreshTokens(userId: string, refreshToken: string) {
-    // 1. Xác minh chữ ký và tính hợp lệ của Refresh Token
     try {
       const refreshSecret =
         this.configService.get<string>('JWT_REFRESH_SECRET') ||
@@ -162,7 +149,6 @@ export class AuthService {
     if (!user || !user.refreshTokenHash) {
       throw new UnauthorizedException('Quyền truy cập bị từ chối!');
     }
-    // So sánh Refresh Token gửi lên với chuỗi băm trong DB
     const isRefreshTokenValid = await this.comparePassword(
       refreshToken,
       user.refreshTokenHash,
@@ -172,7 +158,6 @@ export class AuthService {
         'Refresh Token không hợp lệ hoặc đã hết hạn!',
       );
     }
-    // Tạo bộ token mới
     const tokens = await this.generateTokens({
       sub: user.id,
       email: user.email,
@@ -180,7 +165,7 @@ export class AuthService {
     });
     return tokens;
   }
-  // Đăng xuất: Xóa trường refreshToken trong DB để vô hiệu hóa Refresh Token hiện tại.
+
   async logout(userId: string) {
     await this.prisma.user.update({
       where: { id: userId },
@@ -192,7 +177,7 @@ export class AuthService {
       message: 'Đăng xuất thành công',
     };
   }
-  // Thay đổi mật khẩu người dùng
+
   async changePassword(userId: string, changePasswordDto: ChangePasswordDto) {
     const { oldPassword, newPassword } = changePasswordDto;
     const user = await this.prisma.user.findUnique({
@@ -201,7 +186,6 @@ export class AuthService {
     if (!user) {
       throw new UnauthorizedException('Người dùng không tồn tại!');
     }
-    // So sánh mật khẩu cũ
     const isPasswordValid = await this.comparePassword(
       oldPassword,
       user.passwordHash,
@@ -209,9 +193,7 @@ export class AuthService {
     if (!isPasswordValid) {
       throw new UnauthorizedException('Mật khẩu cũ không chính xác!');
     }
-    // Băm mật khẩu mới
     const hashedNewPassword = await this.hashPassword(newPassword);
-    // Cập nhật mật khẩu mới và xóa Refresh Token hash để buộc tất cả phiên đăng nhập khác phải đăng nhập lại
     await this.prisma.user.update({
       where: { id: userId },
       data: {

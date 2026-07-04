@@ -3,17 +3,24 @@ import {
   ConflictException,
   NotFoundException,
   BadRequestException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateDoctorDto } from './dto/create-doctor.dto';
 import { UpdateDoctorDto } from './dto/update-doctor.dto';
 import { Role } from '../auth/enums/role.enum';
-import { UserStatus,SlotStatus } from '@prisma/client';
+import { UserStatus, SlotStatus, AppointmentStatus } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import { QueuesService } from '../queues/queues.service';
 
 @Injectable()
 export class DoctorsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(forwardRef(() => QueuesService))
+    private readonly queuesService: QueuesService,
+  ) {}
 
   /**
    * Băm mật khẩu người dùng trước khi lưu vào database
@@ -133,7 +140,7 @@ export class DoctorsService {
     limit?: string;
   }) {
     const page = parseInt(query.page || '1', 10);
-    const limit = parseInt(query.limit || '10', 10);
+    const limit = parseInt(query.limit || '10', 20);
     const skip = (page - 1) * limit;
 
     const where: any = {};
@@ -528,6 +535,225 @@ export class DoctorsService {
     return this.prisma.slot.findMany({
       where:whereClause,
       orderBy:{startTime:'asc'}
+    });
+  }
+
+  /**
+   * Lấy danh sách tất cả lịch hẹn được phân cho bác sĩ đăng nhập hôm nay (hoặc ngày cụ thể)
+   */
+  async getTodayAppointments(currentUser: any, dateStr?: string) {
+    const doctor = await this.prisma.doctor.findUnique({
+      where: { userId: currentUser.userId },
+    });
+    if (!doctor) {
+      throw new NotFoundException('Không tìm thấy hồ sơ bác sĩ trên hệ thống!');
+    }
+
+    let targetDateStr = dateStr;
+    if (!targetDateStr) {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      targetDateStr = `${year}-${month}-${day}`;
+    }
+
+    const parsedDate = new Date(`${targetDateStr}T00:00:00.000Z`);
+    if (isNaN(parsedDate.getTime())) {
+      throw new BadRequestException('Ngày truy vấn không đúng định dạng YYYY-MM-DD');
+    }
+
+    const appointments = await this.prisma.appointment.findMany({
+      where: {
+        doctorId: doctor.id,
+        slot: {
+          date: parsedDate,
+        },
+      },
+      include: {
+        patient: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+            phone: true,
+            birthDate: true,
+          },
+        },
+        slot: {
+          select: {
+            id: true,
+            startTime: true,
+            endTime: true,
+            status: true,
+          },
+        },
+        medicalRecord: {
+          select: {
+            id: true,
+            diagnosis: true,
+            treatment: true,
+            prescription: true,
+            followUpDate: true,
+          },
+        },
+        queueEntry: {
+          select: {
+            id: true,
+            queueNo: true,
+            status: true,
+            estimatedWait: true,
+          },
+        },
+      },
+      orderBy: {
+        slot: {
+          startTime: 'asc',
+        },
+      },
+    });
+
+    return appointments;
+  }
+
+  /**
+   * Xem hồ sơ chi tiết của bệnh nhân (bao gồm thông tin cá nhân và lịch sử khám bệnh)
+   */
+  async getPatientDetail(patientId: string) {
+    const patient = await this.prisma.user.findUnique({
+      where: { id: patientId },
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        phone: true,
+        birthDate: true,
+        createdAt: true,
+        role: {
+          select: {
+            code: true,
+          },
+        },
+      },
+    });
+
+    if (!patient || patient.role.code !== 'PATIENT') {
+      throw new NotFoundException('Không tìm thấy thông tin bệnh nhân!');
+    }
+
+    // Lấy lịch sử bệnh án (medical records)
+    const medicalRecords = await this.prisma.medicalRecord.findMany({
+      where: { patientId: patient.id },
+      include: {
+        appointment: {
+          include: {
+            doctor: {
+              include: {
+                user: {
+                  select: {
+                    fullName: true,
+                  },
+                },
+                specialty: {
+                  select: {
+                    name: true,
+                  },
+                },
+              },
+            },
+            slot: {
+              select: {
+                date: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    // Lấy lịch sử tất cả cuộc hẹn khám (appointments)
+    const appointments = await this.prisma.appointment.findMany({
+      where: { patientId: patient.id },
+      include: {
+        doctor: {
+          include: {
+            user: {
+              select: {
+                fullName: true,
+              },
+            },
+            specialty: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        },
+        slot: {
+          select: {
+            date: true,
+            startTime: true,
+            endTime: true,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    return {
+      profile: {
+        id: patient.id,
+        fullName: patient.fullName,
+        email: patient.email,
+        phone: patient.phone,
+        birthDate: patient.birthDate,
+        createdAt: patient.createdAt,
+      },
+      medicalHistory: medicalRecords.map((record) => ({
+        id: record.id,
+        diagnosis: record.diagnosis,
+        treatment: record.treatment,
+        prescription: record.prescription,
+        notes: record.notes,
+        followUpDate: record.followUpDate,
+        date: record.appointment.slot.date,
+        doctorName: record.appointment.doctor.user.fullName,
+        specialtyName: record.appointment.doctor.specialty.name,
+      })),
+      appointmentHistory: appointments.map((app) => ({
+        id: app.id,
+        status: app.status,
+        bookingType: app.bookingType,
+        symptoms: app.symptoms,
+        notes: app.notes,
+        date: app.slot.date,
+        startTime: app.slot.startTime,
+        endTime: app.slot.endTime,
+        doctorName: app.doctor.user.fullName,
+        specialtyName: app.doctor.specialty.name,
+      })),
+    };
+  }
+
+  /**
+   * Xem danh sách hàng đợi riêng của bác sĩ đăng nhập hôm nay
+   */
+  async getDoctorQueue(currentUser: any, dateStr?: string) {
+    const doctor = await this.prisma.doctor.findUnique({
+      where: { userId: currentUser.userId },
+    });
+    if (!doctor) {
+      throw new NotFoundException('Không tìm thấy hồ sơ bác sĩ trên hệ thống!');
+    }
+
+    return this.queuesService.getQueueMonitor({
+      doctorId: doctor.id,
+      date: dateStr,
     });
   }
 }

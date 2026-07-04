@@ -32,9 +32,9 @@ export default function DashboardPage() {
 
   // Hiển thị vòng xoay tải trang trong thời gian chuyển hướng ngắn
   return (
-    <div className="flex flex-col items-center justify-center p-12 min-h-[50vh] text-slate-400">
-      <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-      <p className="text-sm font-medium animate-pulse">Đang định tuyến đến bảng điều khiển của bạn...</p>
+    <div className="fallback-loader">
+      <div className="spinner"></div>
+      <p style={{ fontSize: '0.875rem', fontWeight: 500 }}>Đang định tuyến đến bảng điều khiển của bạn...</p>
     </div>
   );
 }

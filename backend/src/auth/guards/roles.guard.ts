@@ -19,27 +19,26 @@ interface RequestWithUser {
     role: Role;
   };
 }
-
 @Injectable()
 export class RolesGuard implements CanActivate {
   // Khởi tạo logger riêng cho RolesGuard, tự động kết xuất log qua Winston hệ thống
   private readonly logger = new Logger(RolesGuard.name);
   constructor(private reflector: Reflector) {}
   canActivate(context: ExecutionContext): boolean {
-    // 1. Lấy danh sách các role được chỉ định từ decorator @Roles
+    // Lấy danh sách các role được chỉ định từ decorator @Roles
     // Tìm kiếm ở cả mức method (getHandler) và mức class (getClass)
     const requiredRoles = this.reflector.getAllAndOverride<Role[]>(ROLES_KEY, [
-      context.getHandler(),
-      context.getClass(),
+      context.getHandler(),//lấy method hiện tại
+      context.getClass(),//lấy controller hiện tại
     ]);
     // Nếu route không yêu cầu bất kỳ role nào, cho phép truy cập qua
     if (!requiredRoles || requiredRoles.length === 0) {
       return true;
     }
-    // 2. Lấy thông tin request và user đã được gán bởi JwtAuthGuard trước đó
+    // Lấy thông tin request và user đã được gán bởi JwtAuthGuard trước đó
     const request = context.switchToHttp().getRequest<RequestWithUser>();
     const user = request?.user;
-    // 3. CẢNH BÁO nếu quên áp dụng JwtAuthGuard trước RolesGuard
+    // CẢNH BÁO nếu quên áp dụng JwtAuthGuard trước RolesGuard
     if (!user) {
       this.logger.warn(
         `Lỗi cấu hình Guards: RolesGuard được sử dụng nhưng request.user bị undefined. ` +
@@ -49,10 +48,10 @@ export class RolesGuard implements CanActivate {
         'Yêu cầu xác thực tài khoản trước khi phân quyền!',
       );
     }
-    // 4. Kiểm tra xem vai trò của user hiện tại có khớp với các vai trò được phép không
+    // Kiểm tra xem vai trò của user hiện tại có khớp với các vai trò được phép không
     const hasRole = requiredRoles.includes(user.role);
     if (!hasRole) {
-      // 5. Ghi log cảnh báo chi tiết khi phát hiện hành vi truy cập trái phép (Security Warning)
+      // Ghi log cảnh báo chi tiết khi phát hiện hành vi truy cập trái phép (Security Warning)
       const { method, url, ip } = request;
       this.logger.warn(
         `[TRUY CẬP TRÁI PHÉP] Người dùng không đủ quyền hạn. ` +

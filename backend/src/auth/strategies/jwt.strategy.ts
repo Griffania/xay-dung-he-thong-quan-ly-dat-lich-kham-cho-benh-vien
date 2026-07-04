@@ -15,7 +15,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     super({
       // Rút trích JWT từ header của Request dưới dạng: Authorization: Bearer <token>
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
-      ignoreExpiration: false, // Bắt buộc kiểm tra hạn sử dụng của token
+      ignoreExpiration: false, // token hết hạn ko cho truy cập nếu true thì cho qua nếu token có hết hạn
       // Xác minh chữ ký bằng khóa Access Secret, Đọc từ file environment (.env)
       secretOrKey:
         configService.get<string>('JWT_ACCESS_SECRET') ||
