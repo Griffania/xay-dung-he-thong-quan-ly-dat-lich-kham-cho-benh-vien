@@ -14,9 +14,7 @@ import { SlotStatus } from '@prisma/client';
 @Injectable()
 export class WorkSchedulesService {
   constructor(private readonly prisma: PrismaService) {}
-  /**
-   * Chuyển đổi chuỗi ngày YYYY-MM-DD thành đối tượng Date ở UTC 00:00:00
-   */
+  // Chuyển đổi chuỗi ngày YYYY-MM-DD thành đối tượng Date ở UTC 00:00:00
   private parseDate(dateStr: string): Date {
     const date = new Date(`${dateStr}T00:00:00.000Z`);
     if (isNaN(date.getTime())) {
@@ -26,9 +24,8 @@ export class WorkSchedulesService {
     }
     return date;
   }
-  /**
-   * Chuyển đổi chuỗi giờ HH:mm hoặc HH:mm:ss thành đối tượng Date với mốc ngày cố định 1970-01-01 UTC
-   */
+  // Chuyển đổi chuỗi giờ HH:mm hoặc HH:mm:ss thành đối tượng Date với mốc ngày cố định 1970-01-01 UTC
+   
   private parseTime(timeStr: string): Date {
     let formattedTime = timeStr;
     if (timeStr.length === 5) {
@@ -42,9 +39,8 @@ export class WorkSchedulesService {
     }
     return date;
   }
-  /**
-   * Tạo lịch làm việc mới cho Bác sĩ (chỉ ADMIN có quyền)
-   */
+  // Tạo lịch làm việc mới cho Bác sĩ (chỉ ADMIN có quyền)
+   
   async create(createWorkScheduleDto: CreateWorkScheduleDto) {
     const {
       doctorId,
@@ -53,7 +49,7 @@ export class WorkSchedulesService {
       endTime: endTimeStr,
       slotDurationMin = 30,
     } = createWorkScheduleDto;
-    // 1. Kiểm tra sự tồn tại của Bác sĩ
+    // Kiểm tra sự tồn tại của Bác sĩ
     const doctor = await this.prisma.doctor.findUnique({
       where: { id: doctorId },
       include: { user: true },
@@ -61,13 +57,13 @@ export class WorkSchedulesService {
     if (!doctor) {
       throw new NotFoundException('Không tìm thấy hồ sơ bác sĩ được chỉ định!');
     }
-    // 2. Parse và chuẩn hóa ngày/giờ
+    // Parse và chuẩn hóa ngày/giờ
     const workDate = this.parseDate(workDateStr);
     const startTime = this.parseTime(startTimeStr);
     const endTime = this.parseTime(endTimeStr);
     const startTimeMs = startTime.getTime();
     const endTimeMs = endTime.getTime();
-    // 3. Validation phạm vi thời gian
+    // Validation phạm vi thời gian
     if (startTimeMs >= endTimeMs) {
       throw new BadRequestException(
         'Thời gian bắt đầu phải nhỏ hơn thời gian kết thúc!',
@@ -80,7 +76,7 @@ export class WorkSchedulesService {
         `Tổng thời gian làm việc phải lớn hơn hoặc bằng thời lượng một slot khám (${slotDurationMin} phút)!`,
       );
     }
-    // 4. Kiểm tra trùng lặp lịch làm việc (Overlap validation)
+    //Kiểm tra trùng lặp lịch làm việc (Overlap validation)
     const existingOverlap = await this.prisma.workSchedule.findFirst({
       where: {
         doctorId,
@@ -102,9 +98,9 @@ export class WorkSchedulesService {
         'Bác sĩ đã có một ca làm việc khác trùng lặp thời gian (Schedule Collision) trong ngày này!',
       );
     }
-    // 5. Khởi chạy transaction tạo lịch trình và tự động chia nhỏ thành các Slot khám
+    //Khởi chạy transaction tạo lịch trình và tự động chia nhỏ thành các Slot khám
     const result = await this.prisma.$transaction(async (tx) => {
-      // 5a. Tạo WorkSchedule
+      // Tạo WorkSchedule
       const schedule = await tx.workSchedule.create({
         data: {
           doctorId,
@@ -114,7 +110,7 @@ export class WorkSchedulesService {
           slotDurationMin,
         },
       });
-      // 5b. Tính toán và tạo các Slot khám
+      //Tính toán và tạo các Slot khám
       const slotsData: any[] = [];
       for (
         let t = startTimeMs;
@@ -142,9 +138,7 @@ export class WorkSchedulesService {
       data: await this.findOne(result.id, { role: Role.ADMIN }), // Trả về kèm chi tiết slot
     };
   }
-  /**
-   * Truy vấn danh sách lịch làm việc có bộ lọc và phân trang
-   */
+  // Truy vấn danh sách lịch làm việc có bộ lọc và phân trang
   async findAll(
     user: any,
     query: {
@@ -228,9 +222,8 @@ export class WorkSchedulesService {
       },
     };
   }
-  /**
-   * Lấy chi tiết lịch làm việc theo ID
-   */
+  // Lấy chi tiết lịch làm việc theo ID
+   
   async findOne(id: string, user: any) {
     const schedule = await this.prisma.workSchedule.findUnique({
       where: { id },
@@ -275,9 +268,8 @@ export class WorkSchedulesService {
 
     return schedule;
   }
-  /**
-   * Cập nhật thông tin lịch làm việc và làm mới các slot (chỉ ADMIN có quyền)
-   */
+  // Cập nhật thông tin lịch làm việc và làm mới các slot (chỉ ADMIN có quyền)
+   
   async update(id: string, updateWorkScheduleDto: UpdateWorkScheduleDto) {
     // 1. Kiểm tra sự tồn tại của ca làm việc
     const schedule = await this.prisma.workSchedule.findUnique({
@@ -394,9 +386,8 @@ export class WorkSchedulesService {
       data: await this.findOne(id, { role: Role.ADMIN }),
     };
   }
-  /**
-   * Xóa lịch làm việc (chỉ ADMIN có quyền)
-   */
+  // Xóa lịch làm việc (chỉ ADMIN có quyền)
+  
   async delete(id: string) {
     // 1. Kiểm tra tồn tại
     const schedule = await this.prisma.workSchedule.findUnique({
