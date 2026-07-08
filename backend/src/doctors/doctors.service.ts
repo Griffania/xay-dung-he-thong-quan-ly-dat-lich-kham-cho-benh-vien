@@ -22,18 +22,12 @@ export class DoctorsService {
     private readonly queuesService: QueuesService,
   ) {}
 
-  /**
-   * Băm mật khẩu người dùng trước khi lưu vào database
-   * @param password Mật khẩu thô
-   */
   private async hashPassword(password: string): Promise<string> {
     const saltRounds = 10;
     return bcrypt.hash(password, saltRounds);
   }
-  /**
-   * Loại bỏ các trường nhạy cảm khỏi thông tin tài khoản người dùng
-   * @param user Đối tượng người dùng lấy từ DB
-   */
+  // Loại bỏ các trường nhạy cảm khỏi thông tin tài khoản người dùng
+  // @param user Đối tượng người dùng lấy từ DB
   private sanitizeUser(user: any) {
     if (!user) return null;
     const { passwordHash, refreshTokenHash, ...sanitized } = user;
@@ -42,11 +36,7 @@ export class DoctorsService {
     }
     return sanitized;
   }
-  /**
-   * Tạo mới một hồ sơ Bác sĩ (bao gồm tài khoản User với vai trò DOCTOR)
-   * Thực hiện trong 1 database transaction để đảm bảo tính toàn vẹn
-   * @param createDoctorDto Dữ liệu tạo bác sĩ
-   */
+
   async create(createDoctorDto: CreateDoctorDto) {
     const {
       email,
@@ -128,21 +118,12 @@ export class DoctorsService {
       },
     };
   }
-  /**
-   * Truy vấn danh sách bác sĩ với các điều kiện lọc và phân trang
-   * @param query Các filter tìm kiếm, chuyên khoa, trạng thái và phân trang
-   */
+
   async findAll(query: {
     search?: string;
     specialtyId?: string;
     isActive?: string;
-    page?: string;
-    limit?: string;
   }) {
-    const page = parseInt(query.page || '1', 10);
-    const limit = parseInt(query.limit || '10', 20);
-    const skip = (page - 1) * limit;
-
     const where: any = {};
 
     // Tìm kiếm tương đối theo tên bác sĩ, email, sđt hoặc số giấy phép
@@ -183,8 +164,6 @@ export class DoctorsService {
           }, // Kèm thông tin tài khoản cơ bản có role
           specialty: true, // Kèm thông tin chuyên khoa
         },
-        skip,
-        take: limit,
         orderBy: { createdAt: 'desc' },
       }),
       this.prisma.doctor.count({ where }),
@@ -211,16 +190,10 @@ export class DoctorsService {
       data: formattedData,
       meta: {
         total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
       },
     };
   }
-  /**
-   * Lấy chi tiết thông tin một bác sĩ theo ID của hồ sơ bác sĩ
-   * @param id ID của hồ sơ bác sĩ
-   */
+
   async findOne(id: string) {
     const doctor = await this.prisma.doctor.findUnique({
       where: { id },
@@ -252,11 +225,7 @@ export class DoctorsService {
       },
     };
   }
-  /**
-   * Cập nhật thông tin bác sĩ (bao gồm thông tin cá nhân ở bảng User và chuyên môn ở bảng Doctor)
-   * @param id ID của hồ sơ bác sĩ
-   * @param updateDoctorDto Dữ liệu cần cập nhật
-   */
+
   async update(id: string, updateDoctorDto: UpdateDoctorDto) {
     // 1. Kiểm tra sự tồn tại của bác sĩ
     const doctor = await this.prisma.doctor.findUnique({
@@ -322,11 +291,8 @@ export class DoctorsService {
       data: await this.findOne(id),
     };
   }
-  /**
-   * Gán chuyên khoa khác cho Bác sĩ
-   * @param id ID của hồ sơ bác sĩ
-   * @param specialtyId ID chuyên khoa cần gán
-   */
+  // Gán chuyên khoa khác cho Bác sĩ
+
   async assignSpecialty(id: string, specialtyId: string) {
     // 1. Kiểm tra sự tồn tại của bác sĩ
     const doctor = await this.prisma.doctor.findUnique({
@@ -367,11 +333,7 @@ export class DoctorsService {
       },
     };
   }
-  /**
-   * Vô hiệu hóa một bác sĩ (isActive = false)
-   * Vô hiệu hóa ở đây có nghĩa là ẩn bác sĩ khỏi danh sách khám, đặt lịch, v.v.
-   * @param id ID của hồ sơ bác sĩ
-   */
+
   async disable(id: string) {
     const doctor = await this.prisma.doctor.findUnique({
       where: { id },
@@ -405,10 +367,7 @@ export class DoctorsService {
       },
     };
   }
-  /**
-   * Kích hoạt lại bác sĩ (isActive = true)
-   * @param id ID của hồ sơ bác sĩ
-   */
+
   async enable(id: string) {
     const doctor = await this.prisma.doctor.findUnique({
       where: { id },
@@ -440,12 +399,8 @@ export class DoctorsService {
       },
     };
   }
-  /**
-   * Lấy danh sách lịch làm việc của một bác sĩ cụ thể (Dành cho bệnh nhân xem/đặt lịch)
-   * @param doctorId ID của hồ sơ bác sĩ (dạng UUID)
-   * @param user Đối tượng người dùng đang đăng nhập
-   * @param query Bộ lọc ngày làm việc và phân trang
-   */
+  // Lấy danh sách lịch làm việc của một bác sĩ cụ thể (Dành cho bệnh nhân xem/đặt lịch)
+
   async findDoctorSchedules(
     doctorId: string,
     user: any,
@@ -494,11 +449,8 @@ export class DoctorsService {
       },
     };  
   }
-  /**
-   * Lấy danh sách các khung giờ khám còn trống (AVAILABLE) của bác sĩ theo ngày cụ thể
-   * @param doctorId ID của hồ sơ bác sĩ
-   * @param dateStr Ngày cần tra cứu dạng YYYY-MM-DD
-   */
+//  Lấy danh sách các khung giờ khám còn trống (AVAILABLE) của bác sĩ theo ngày cụ thể
+
   async findAvailableSlots(doctorId:string,dateStr:string){
     const doctor = await this.prisma.doctor.findUnique({
       where : {id:doctorId},
@@ -538,9 +490,8 @@ export class DoctorsService {
     });
   }
 
-  /**
-   * Lấy danh sách tất cả lịch hẹn được phân cho bác sĩ đăng nhập hôm nay (hoặc ngày cụ thể)
-   */
+//  Lấy danh sách tất cả lịch hẹn được phân cho bác sĩ đăng nhập hôm nay (hoặc ngày cụ thể)
+
   async getTodayAppointments(currentUser: any, dateStr?: string) {
     const doctor = await this.prisma.doctor.findUnique({
       where: { userId: currentUser.userId },
@@ -616,9 +567,8 @@ export class DoctorsService {
     return appointments;
   }
 
-  /**
-   * Xem hồ sơ chi tiết của bệnh nhân (bao gồm thông tin cá nhân và lịch sử khám bệnh)
-   */
+//  Xem hồ sơ chi tiết của bệnh nhân (bao gồm thông tin cá nhân và lịch sử khám bệnh)
+   
   async getPatientDetail(patientId: string) {
     const patient = await this.prisma.user.findUnique({
       where: { id: patientId },
@@ -740,9 +690,8 @@ export class DoctorsService {
     };
   }
 
-  /**
-   * Xem danh sách hàng đợi riêng của bác sĩ đăng nhập hôm nay
-   */
+  //  Xem danh sách hàng đợi riêng của bác sĩ đăng nhập hôm nay
+   
   async getDoctorQueue(currentUser: any, dateStr?: string) {
     const doctor = await this.prisma.doctor.findUnique({
       where: { userId: currentUser.userId },

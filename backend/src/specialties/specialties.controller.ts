@@ -43,10 +43,8 @@ export class SpecialtiesController {
   findAll(
     @Query('search') search?: string,
     @Query('isActive') isActive?: string,
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
   ) {
-    return this.specialtiesService.findAll({ search, isActive, page, limit });
+    return this.specialtiesService.findAll({ search, isActive,});
   }
   /**
    * Lấy chi tiết thông tin chuyên khoa theo ID

@@ -45,10 +45,8 @@ export class UsersController {
   findAll(
     @Query('search') search?: string,
     @Query('role') role?: Role,
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
   ) {
-    return this.usersService.findAll({ search, role, page, limit });
+    return this.usersService.findAll({ search, role, });
   }
 
   /**

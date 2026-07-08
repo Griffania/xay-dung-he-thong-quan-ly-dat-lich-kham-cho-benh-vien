@@ -12,9 +12,7 @@ import { QueryAvailableSlotsDto } from './dto/query-available-slots.dto';
 export class SlotsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  /**
-   * Truy vấn danh sách khung giờ khám (Slot) khả dụng của bác sĩ trong một ngày cụ thể
-   */
+  //Truy vấn danh sách khung giờ khám (Slot) khả dụng của bác sĩ trong một ngày cụ thể
   async getAvailableSlots(query: QueryAvailableSlotsDto) {
     const { doctorId, date: dateStr } = query;
 
@@ -51,9 +49,8 @@ export class SlotsService {
     });
   }
 
-  /**
-   * Khóa thủ công một slot thời gian (ví dụ bác sĩ có việc đột xuất)
-   */
+  //Khóa thủ công một slot thời gian (ví dụ bác sĩ có việc đột xuất)
+
   async lockSlot(id: string) {
     const slot = await this.prisma.slot.findUnique({
       where: { id },
@@ -75,9 +72,7 @@ export class SlotsService {
     });
   }
 
-  /**
-   * Mở khóa lại slot đã bị khóa thủ công
-   */
+//Mở khóa lại slot đã bị khóa thủ công
   async unlockSlot(id: string) {
     const slot = await this.prisma.slot.findUnique({
       where: { id },

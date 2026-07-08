@@ -6,10 +6,7 @@ import {
   IsNotEmpty,
 } from 'class-validator';
 
-/**
- * Data Transfer Object (DTO) phục vụ việc cập nhật thông tin Bác sĩ.
- * Cho phép chỉnh sửa thông tin cá nhân và thông tin chuyên môn nhưng loại trừ email và password.
- */
+
 export class UpdateDoctorDto {
   // --- Thông tin tài khoản người dùng có thể cập nhật ---
   @IsString({ message: 'Họ và tên phải là chuỗi ký tự!' })

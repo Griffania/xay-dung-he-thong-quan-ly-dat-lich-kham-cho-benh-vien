@@ -10,10 +10,8 @@ import { UpdateSpecialtyDto } from './dto/update-specialty.dto';
 @Injectable()
 export class SpecialtiesService {
   constructor(private readonly prisma: PrismaService) {}
-  /**
-   * Tạo mới một chuyên khoa
-   * @param createSpecialtyDto Dữ liệu tạo mới chuyên khoa
-   */
+//Tạo mới một chuyên khoa
+
   async create(createSpecialtyDto: CreateSpecialtyDto) {
     const { name, description } = createSpecialtyDto;
     // Kiểm tra tên chuyên khoa trùng lặp
@@ -38,20 +36,12 @@ export class SpecialtiesService {
       data: specialty,
     };
   }
-  /**
-   * Truy vấn danh sách chuyên khoa có bộ lọc, tìm kiếm và phân trang
-   * @param query Bộ lọc truy vấn bao gồm tìm kiếm, trạng thái, trang và giới hạn bản ghi
-   */
+//Truy vấn danh sách chuyên khoa có bộ lọc, tìm kiếm và phân trang
+
   async findAll(query: {
     search?: string;
     isActive?: string;
-    page?: string;
-    limit?: string;
   }) {
-    const page = parseInt(query.page || '1', 10);
-    const limit = parseInt(query.limit || '10', 10);
-    const skip = (page - 1) * limit;
-
     const where: any = {};
 
     // Tìm kiếm theo tên chuyên khoa (không phân biệt hoa thường)
@@ -71,8 +61,6 @@ export class SpecialtiesService {
     const [specialties, total] = await Promise.all([
       this.prisma.specialty.findMany({
         where,
-        skip,
-        take: limit,
         orderBy: { createdAt: 'desc' }, // Mới tạo hiển thị lên đầu
       }),
       this.prisma.specialty.count({ where }),
@@ -82,16 +70,10 @@ export class SpecialtiesService {
       data: specialties,
       meta: {
         total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
       },
     };
   }
-  /**
-   * Lấy chi tiết thông tin một chuyên khoa theo ID
-   * @param id ID của chuyên khoa
-   */
+ //Lấy chi tiết thông tin một chuyên khoa theo ID
   async findOne(id: string) {
     const specialty = await this.prisma.specialty.findUnique({
       where: { id },
@@ -103,11 +85,7 @@ export class SpecialtiesService {
 
     return specialty;
   }
-  /**
-   * Cập nhật thông tin chuyên khoa
-   * @param id ID chuyên khoa cần cập nhật
-   * @param updateSpecialtyDto Dữ liệu cập nhật chuyên khoa
-   */
+//Cập nhật thông tin chuyên khoa
   async update(id: string, updateSpecialtyDto: UpdateSpecialtyDto) {
     // Kiểm tra sự tồn tại của chuyên khoa
     const specialty = await this.prisma.specialty.findUnique({
@@ -140,10 +118,8 @@ export class SpecialtiesService {
       data: updatedSpecialty,
     };
   }
-  /**
-   * Vô hiệu hóa một chuyên khoa (ngưng hoạt động)
-   * @param id ID của chuyên khoa
-   */
+//Vô hiệu hóa một chuyên khoa (ngưng hoạt động)
+
   async disable(id: string) {
     // Kiểm tra sự tồn tại
     const specialty = await this.prisma.specialty.findUnique({
@@ -161,10 +137,8 @@ export class SpecialtiesService {
       data: updatedSpecialty,
     };
   }
-  /**
-   * Kích hoạt lại chuyên khoa
-   * @param id ID của chuyên khoa
-   */
+// Kích hoạt lại chuyên khoa
+
   async enable(id: string) {
     // Kiểm tra sự tồn tại
     const specialty = await this.prisma.specialty.findUnique({

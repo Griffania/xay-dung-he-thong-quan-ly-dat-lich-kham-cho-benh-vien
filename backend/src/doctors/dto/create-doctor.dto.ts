@@ -8,10 +8,7 @@ import {
   IsUUID,
 } from 'class-validator';
 
-/**
- * Data Transfer Object (DTO) phục vụ việc tạo mới Bác sĩ.
- * Bao gồm cả thông tin tài khoản người dùng và thông tin chuyên môn của bác sĩ.
- */
+
 export class CreateDoctorDto {
   // --- Thông tin tài khoản người dùng (User Account) ---
 

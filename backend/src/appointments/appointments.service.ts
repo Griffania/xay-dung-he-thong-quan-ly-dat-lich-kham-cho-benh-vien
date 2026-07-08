@@ -205,9 +205,6 @@ export class AppointmentsService{
             }
             //lấy danh sách lịch hẹn khám bênh theo phân quyền và bộ lọc
             async findAll(query:QueryAppointmentsDto,currentUser:any){
-                const page = parseInt(query.page||'1',10);
-                const limit = parseInt(query.limit||'10',10);
-                const skip = (page -1)*limit;
                 const where :any = {};
                 //áp đặt phân quyền theo vai trò người dùng
                 if(currentUser.role===Role.PATIENT){
@@ -270,8 +267,6 @@ export class AppointmentsService{
                             },
                             slot:true,
                         },
-                        skip,
-                        take:limit,
                         orderBy:{createdAt:'desc'},
                     }),
                     this.prisma.appointment.count({where}),
@@ -280,9 +275,6 @@ export class AppointmentsService{
                     data : appointments,
                     meta: {
                         total,
-                        page,
-                        limit,
-                        totalPages:Math.ceil(total/limit),
                     },
                 };
             }

@@ -77,11 +77,9 @@ export default function DashboardLayout({
     switch (role) {
       case 'ADMIN':
         return [
-          { label: 'Tổng quan Hệ thống', href: '/dashboard/admin', icon: Shield },
           { label: 'Quản lý Tài khoản', href: '/dashboard/admin#users', icon: Users },
           { label: 'Quản lý Bác sĩ', href: '/dashboard/admin/doctors', icon: User },
           { label: 'Quản lý Chuyên khoa', href: '/dashboard/admin/specialties', icon: Stethoscope },
-          { label: 'Cấu hình Hệ thống', href: '/dashboard/admin#settings', icon: Settings },
         ];
       case 'DOCTOR':
         return [
@@ -98,8 +96,8 @@ export default function DashboardLayout({
       case 'PATIENT':
         return [
           { label: 'Lịch hẹn của tôi', href: '/dashboard/patient', icon: Calendar },
-          { label: 'Đặt lịch khám mới', href: '/dashboard/patient#book', icon: HeartHandshake },
-          { label: 'Lịch sử khám bệnh', href: '/dashboard/patient#history', icon: History },
+          { label: 'Đặt lịch khám mới', href: '/dashboard/patient/book', icon: HeartHandshake },
+          { label: 'Lịch sử khám bệnh', href: '/dashboard/patient/history', icon: History },
         ];
       default:
         return [];
@@ -123,31 +121,16 @@ export default function DashboardLayout({
 
   return (
     <div className="dashboard-layout">
-      {/* MOBILE HEADER BAR */}
-      <div className="mobile-header">
-        <div className="logo-container">
-          <div className="logo-square">
-            C
-          </div>
-        </div>
-        <button 
-          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-          className="mobile-menu-toggle"
-        >
-          {isMobileMenuOpen ? <X style={{ width: '1.5rem', height: '1.5rem' }} /> : <Menu style={{ width: '1.5rem', height: '1.5rem' }} />}
-        </button>
-      </div>
-
-      {/* SIDEBAR - DESKTOP & MOBILE DRAW RENDER */}
+      {/* SIDEBAR*/}
       <aside className={`dashboard-sidebar ${isMobileMenuOpen ? '' : 'collapsed'}`}>
         <div className="flex flex-col gap-6">
           {/* Logo Brand */}
           <div className="sidebar-logo">
             <div className="logo-square">
-              C
+              C-C
             </div>
             <div>
-              <span className="brand-name block" style={{ fontSize: '1.125rem', lineHeight: 1 }}> System</span>
+              <span className="brand-name block" style={{ fontSize: '1.125rem', lineHeight: 1 }}> C-Clinic</span>
             </div>
           </div>
 
@@ -185,13 +168,6 @@ export default function DashboardLayout({
 
         {/* Bottom Actions */}
         <div className="sidebar-bottom">
-          <div className="role-badge-row">
-            <span className="role-badge-label">Vai trò</span>
-            <span className={getRoleBadgeClass()}>
-              {role}
-            </span>
-          </div>
-
           <button
             onClick={handleLogout}
             className="btn btn-secondary w-full"

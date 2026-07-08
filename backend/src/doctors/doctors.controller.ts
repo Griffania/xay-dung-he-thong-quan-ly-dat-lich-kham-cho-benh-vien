@@ -30,89 +30,58 @@ import { query } from 'winston';
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class DoctorsController {
   constructor(private readonly doctorsService: DoctorsService) {}
-  /**
-   * Tạo tài khoản và hồ sơ Bác sĩ mới
-   * Quyền truy cập: Chỉ dành cho ADMIN
-   */
+
   @Post()
   @Roles(Role.ADMIN)
   create(@Body() createDoctorDto: CreateDoctorDto) {
     return this.doctorsService.create(createDoctorDto);
   }
-  /**
-   * Truy vấn danh sách bác sĩ trong hệ thống
-   * Quyền truy cập: Mọi tài khoản đã đăng nhập (Patient, Doctor, Receptionist, Admin)
-   */
+
   @Get()
   findAll(
     @Query('search') search?: string,
     @Query('specialtyId') specialtyId?: string,
     @Query('isActive') isActive?: string,
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
   ) {
     return this.doctorsService.findAll({
       search,
       specialtyId,
       isActive,
-      page,
-      limit,
     });
   }
-  /**
-   * API lấy danh sách tất cả lịch hẹn được phân cho bác sĩ đăng nhập hôm nay
-   * Endpoint: GET /doctors/me/appointments/today
-   * Quyền truy cập: Chỉ dành cho DOCTOR
-   */
+
   @Get('me/appointments/today')
   @Roles(Role.DOCTOR)
   getTodayAppointments(@Req() req: any, @Query('date') date?: string) {
     return this.doctorsService.getTodayAppointments(req.user, date);
   }
 
-  /**
-   * API lấy danh sách hàng đợi riêng của phòng bác sĩ đăng nhập hôm nay
-   * Endpoint: GET /doctors/me/queue
-   * Quyền truy cập: Chỉ dành cho DOCTOR
-   */
+
   @Get('me/queue')
   @Roles(Role.DOCTOR)
   getDoctorQueue(@Req() req: any, @Query('date') date?: string) {
     return this.doctorsService.getDoctorQueue(req.user, date);
   }
 
-  /**
-   * API xem hồ sơ chi tiết của một bệnh nhân (bao gồm lịch sử bệnh án và lịch sử cuộc hẹn khám)
-   * Endpoint: GET /doctors/patients/:id
-   * Quyền truy cập: DOCTOR, RECEPTIONIST, ADMIN
-   */
+ 
   @Get('patients/:id')
   @Roles(Role.DOCTOR, Role.RECEPTIONIST, Role.ADMIN)
   getPatientDetail(@Param('id') id: string) {
     return this.doctorsService.getPatientDetail(id);
   }
 
-  /**
-   * Lấy chi tiết thông tin một bác sĩ theo ID
-   * Quyền truy cập: Mọi tài khoản đã đăng nhập
-   */
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.doctorsService.findOne(id);
   }
-  /**
-   * Cập nhật thông tin tài khoản hoặc chuyên môn bác sĩ
-   * Quyền truy cập: Chỉ dành cho ADMIN
-   */
+
   @Patch(':id')
   @Roles(Role.ADMIN)
   update(@Param('id') id: string, @Body() updateDoctorDto: UpdateDoctorDto) {
     return this.doctorsService.update(id, updateDoctorDto);
   }
-  /**
-   * API chuyên biệt gán hoặc đổi chuyên khoa cho bác sĩ
-   * Quyền truy cập: Chỉ dành cho ADMIN
-   */
+
   @Patch(':id/assign-specialty')
   @Roles(Role.ADMIN)
   assignSpecialty(
@@ -124,29 +93,19 @@ export class DoctorsController {
       assignSpecialtyDto.specialtyId,
     );
   }
-  /**
-   * Vô hiệu hóa hoạt động của bác sĩ
-   * Quyền truy cập: Chỉ dành cho ADMIN
-   */
+
   @Post(':id/disable')
   @Roles(Role.ADMIN)
   disable(@Param('id') id: string) {
     return this.doctorsService.disable(id);
   }
-  /**
-   * Kích hoạt lại hoạt động của bác sĩ
-   * Quyền truy cập: Chỉ dành cho ADMIN
-   */
+
   @Post(':id/enable')
   @Roles(Role.ADMIN)
   enable(@Param('id') id: string) {
     return this.doctorsService.enable(id);
   }
-  /**
-   * API lấy lịch làm việc của một bác sĩ cụ thể
-   * Endpoint: GET /doctors/:id/schedules
-   * Quyền truy cập: Mọi tài khoản đã đăng nhập (Patient, Doctor, Receptionist, Admin)
-   */
+ 
   @Get(':id/chedules')
   getDoctorSchedules(
     @Param('id') id: string,
@@ -159,11 +118,7 @@ export class DoctorsController {
         workDate,page,limit,
     });
   }
-  /**
-   * API lấy các khung giờ khám còn trống (AVAILABLE) của bác sĩ theo ngày
-   * Endpoint: GET /doctors/:id/slots/available?date=YYYY-MM-DD
-   * Quyền truy cập: Mọi tài khoản đã đăng nhập
-   */
+
   @Get(':id/slots/available')
   getAvailableSlots(
     @Param('id') id:string,

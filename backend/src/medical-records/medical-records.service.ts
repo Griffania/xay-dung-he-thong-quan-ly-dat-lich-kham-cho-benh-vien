@@ -14,9 +14,8 @@ export class MedicalRecordsService {
     private readonly queuesService: QueuesService,
   ) {}
 
-  /**
-   * Tạo mới hồ sơ bệnh án cho một lịch hẹn khám
-   */
+  // Tạo mới hồ sơ bệnh án cho một lịch hẹn khám
+   
   async create(createDto: CreateMedicalRecordDto, currentUser: any) {
     const appointment = await this.prisma.appointment.findUnique({
       where: { id: createDto.appointmentId },
@@ -29,7 +28,7 @@ export class MedicalRecordsService {
       throw new NotFoundException('Không tìm thấy thông tin cuộc hẹn khám');
     }
 
-    // 1. Kiểm tra phân quyền: Chỉ ADMIN hoặc chính DOCTOR phụ trách cuộc hẹn mới được lập bệnh án
+    // Kiểm tra phân quyền: Chỉ ADMIN hoặc chính DOCTOR phụ trách cuộc hẹn mới được lập bệnh án
     if (currentUser.role === Role.DOCTOR) {
       const doctor = await this.prisma.doctor.findUnique({
         where: { userId: currentUser.userId },
@@ -41,7 +40,7 @@ export class MedicalRecordsService {
       throw new ForbiddenException('Chỉ Bác sĩ hoặc Quản trị viên mới được phép lập hồ sơ bệnh án');
     }
 
-    // 2. Kiểm tra xem bệnh án đã tồn tại chưa
+    // Kiểm tra xem bệnh án đã tồn tại chưa
     const existingRecord = await this.prisma.medicalRecord.findUnique({
       where: { appointmentId: createDto.appointmentId },
     });
@@ -49,7 +48,7 @@ export class MedicalRecordsService {
       throw new ConflictException('Hồ sơ bệnh án cho cuộc hẹn này đã tồn tại');
     }
 
-    // 3. Kiểm tra trạng thái cuộc hẹn
+    // Kiểm tra trạng thái cuộc hẹn
     if (
       appointment.status !== AppointmentStatus.IN_PROGRESS &&
       appointment.status !== AppointmentStatus.COMPLETED
@@ -59,7 +58,7 @@ export class MedicalRecordsService {
       );
     }
 
-    // 4. Lưu bệnh án trong một transaction
+    // Lưu bệnh án trong một transaction
     return this.prisma.$transaction(async (tx) => {
       const now = new Date();
 
@@ -122,9 +121,8 @@ export class MedicalRecordsService {
     });
   }
 
-  /**
-   * Chỉnh sửa thông tin hồ sơ bệnh án đã lập
-   */
+  //  Chỉnh sửa thông tin hồ sơ bệnh án đã lập
+   
   async update(id: string, updateDto: UpdateMedicalRecordDto, currentUser: any) {
     const medicalRecord = await this.prisma.medicalRecord.findUnique({
       where: { id },
@@ -163,11 +161,10 @@ export class MedicalRecordsService {
     };
   }
 
-  /**
-   * Xem lại toàn bộ bệnh án cũ của một bệnh nhân
-   */
+  //Xem lại toàn bộ bệnh án cũ của một bệnh nhân
+   
   async getPatientHistory(patientId: string, currentUser: any, query: QueryMedicalRecordDto) {
-    // 1. Kiểm tra phân quyền:
+    //  Kiểm tra phân quyền:
     // - PATIENT chỉ được xem bệnh án của chính mình
     // - ADMIN, DOCTOR, RECEPTIONIST được xem lịch sử bệnh án của bất kỳ ai
     if (currentUser.role === Role.PATIENT && currentUser.userId !== patientId) {

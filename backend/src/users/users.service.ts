@@ -56,15 +56,8 @@ export class UsersService {
   async findAll(query: {
     search?: string;
     role?: Role;
-    page?: string;
-    limit?: string;
   }) {
-    const page = parseInt(query.page || '1', 10);
-    const limit = parseInt(query.limit || '10', 10);
-    const skip = (page - 1) * limit;
-
     const where: any = {};
-
     if (query.search) {
       where.OR = [
         { email: { contains: query.search, mode: 'insensitive' } },
@@ -78,8 +71,6 @@ export class UsersService {
       this.prisma.user.findMany({
         where,
         include: { role: true },
-        skip,
-        take: limit,
         orderBy: { createdAt: 'desc' },
       }),
       this.prisma.user.count({ where }),
@@ -88,9 +79,6 @@ export class UsersService {
       data: users.map((user) => this.sanitizeUser(user)),
       meta: {
         total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
       },
     };
   }
