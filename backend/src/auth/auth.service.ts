@@ -97,9 +97,7 @@ export class AuthService {
       include: { role: true },
     });
     if (!user) {
-      throw new UnauthorizedException(
-        'Tài khoản Không tồn tại',
-      );
+      throw new UnauthorizedException('Tài khoản Không tồn tại');
     }
     if (user.status === 'LOCKED') {
       throw new UnauthorizedException('Tài khoản này đã bị khóa!');
@@ -109,9 +107,7 @@ export class AuthService {
       user.passwordHash,
     );
     if (!isPasswordValid) {
-      throw new UnauthorizedException(
-        'mật khẩu không chính xác!',
-      );
+      throw new UnauthorizedException('mật khẩu không chính xác!');
     }
     const tokens = await this.generateTokens({
       sub: user.id,

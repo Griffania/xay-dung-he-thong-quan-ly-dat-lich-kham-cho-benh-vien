@@ -42,7 +42,6 @@ export default function AdminDashboard() {
   const [usersList, setUsersList] = useState<UserItem[]>([]);
   const [userSearch, setUserSearch] = useState('');
   const [userRoleFilter, setUserRoleFilter] = useState('');
-  const [userPage, setUserPage] = useState(1);
   const [userLimit] = useState(100);
   const [userTotal, setUserTotal] = useState(0);
   const [isUsersLoading, setIsUsersLoading] = useState(false);
@@ -82,7 +81,6 @@ export default function AdminDashboard() {
     setIsUsersLoading(true);
     try {
       const params: any = {
-        page: userPage.toString(),
         limit: userLimit.toString()
       };
       if (userSearch) params.search = userSearch;
@@ -110,7 +108,7 @@ export default function AdminDashboard() {
     if (activeTab === 'users') {
       fetchUsers();
     }
-  }, [activeTab, userPage, userSearch, userRoleFilter]);
+  }, [activeTab, userSearch, userRoleFilter]);
 
   // Khóa tài khoản
   const handleLockUser = async (id: string) => {
@@ -214,7 +212,7 @@ export default function AdminDashboard() {
               <input
                 type="text"
                 value={userSearch}
-                onChange={(e) => { setUserSearch(e.target.value); setUserPage(1); }}
+                onChange={(e) => { setUserSearch(e.target.value); }}
                 placeholder="Tìm theo Tên, Email, SĐT..."
                 className="search-input"
               />
@@ -224,7 +222,7 @@ export default function AdminDashboard() {
             <div className="flex gap-3" style={{ alignItems: 'center' }}>
               <select
                 value={userRoleFilter}
-                onChange={(e) => { setUserRoleFilter(e.target.value); setUserPage(1); }}
+                onChange={(e) => { setUserRoleFilter(e.target.value);}}
                 className="select-control"
               >
                 <option value="">Tất cả vai trò</option>

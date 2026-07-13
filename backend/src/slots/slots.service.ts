@@ -27,13 +27,17 @@ export class SlotsService {
       status: SlotStatus.AVAILABLE,
     };
 
-    // Nếu ngày truy vấn là hôm nay, chỉ lấy các slot có giờ bắt đầu lớn hơn giờ hiện tại (UTC)
-    const todayStr = new Date().toISOString().split('T')[0];
+    // Nếu ngày truy vấn là hôm nay, chỉ lấy các slot có giờ bắt đầu lớn hơn giờ hiện tại (local time)
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const todayStr = `${year}-${month}-${day}`;
+
     if (dateStr === todayStr) {
-      const now = new Date();
-      const hours = String(now.getUTCHours()).padStart(2, '0');
-      const minutes = String(now.getUTCMinutes()).padStart(2, '0');
-      const seconds = String(now.getUTCSeconds()).padStart(2, '0');
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      const seconds = String(now.getSeconds()).padStart(2, '0');
       const currentTimeOfDay = new Date(
         `1970-01-01T${hours}:${minutes}:${seconds}.000Z`,
       );
@@ -72,7 +76,7 @@ export class SlotsService {
     });
   }
 
-//Mở khóa lại slot đã bị khóa thủ công
+  //Mở khóa lại slot đã bị khóa thủ công
   async unlockSlot(id: string) {
     const slot = await this.prisma.slot.findUnique({
       where: { id },
@@ -83,7 +87,9 @@ export class SlotsService {
     }
 
     if (slot.status !== SlotStatus.LOCKED) {
-      throw new BadRequestException('Slot này hiện không ở trạng thái bị khóa!');
+      throw new BadRequestException(
+        'Slot này hiện không ở trạng thái bị khóa!',
+      );
     }
 
     return this.prisma.slot.update({
@@ -99,11 +105,7 @@ export class SlotsService {
    * @param completedAt Thời điểm bác sĩ kết thúc ca khám thực tế
    * @param minRemainingMin Thời lượng tối thiểu (phút) của slot con mới được sinh ra
    */
-  async splitSlot(
-    slotId: string,
-    completedAt: Date,
-    minRemainingMin = 10,
-  ) {
+  async splitSlot(slotId: string, completedAt: Date, minRemainingMin = 10) {
     const slot = await this.prisma.slot.findUnique({
       where: { id: slotId },
     });
@@ -113,7 +115,9 @@ export class SlotsService {
     }
 
     if (slot.status !== SlotStatus.BOOKED) {
-      throw new BadRequestException('Slot cần tách phải ở trạng thái đã đặt (BOOKED)!');
+      throw new BadRequestException(
+        'Slot cần tách phải ở trạng thái đã đặt (BOOKED)!',
+      );
     }
 
     // Chuyển đổi completedAt thành mốc giờ ngày 1970-01-01 UTC để so sánh
@@ -130,14 +134,15 @@ export class SlotsService {
     // Kiểm tra xem thời gian hoàn thành thực tế có trước giờ kết thúc dự kiến không
     if (completedTimeMs >= slotEndTimeMs) {
       return {
-        message: 'Ca khám hoàn thành đúng hoặc muộn hơn giờ hẹn. Không cần tách slot.',
+        message:
+          'Ca khám hoàn thành đúng hoặc muộn hơn giờ hẹn. Không cần tách slot.',
         splitCreated: false,
       };
     }
 
     // Tính toán thời gian còn lại (phút)
     const remainingMs = slotEndTimeMs - completedTimeMs;
-    const remainingMin = remainingMs / (60 * 1000);// Đổi từ miligiây sang phút
+    const remainingMin = remainingMs / (60 * 1000); // Đổi từ miligiây sang phút
 
     if (remainingMin < minRemainingMin) {
       return {
@@ -152,10 +157,10 @@ export class SlotsService {
         workScheduleId: slot.workScheduleId,
         doctorId: slot.doctorId,
         date: slot.date,
-        startTime: completedTimeOfDay,// Bắt đầu ngay từ lúc bác sĩ vừa khám xong ca trước
-        endTime: slot.endTime,// Kết thúc tại đúng giờ kết thúc ban đầu của ca trước
-        status: SlotStatus.AVAILABLE,// Trạng thái Trống để người khác đặt
-        parentSlotId: slot.id,// Lưu lại ID của slot cha để sau này biết slot này do đâu mà ra
+        startTime: completedTimeOfDay, // Bắt đầu ngay từ lúc bác sĩ vừa khám xong ca trước
+        endTime: slot.endTime, // Kết thúc tại đúng giờ kết thúc ban đầu của ca trước
+        status: SlotStatus.AVAILABLE, // Trạng thái Trống để người khác đặt
+        parentSlotId: slot.id, // Lưu lại ID của slot cha để sau này biết slot này do đâu mà ra
       },
     });
 

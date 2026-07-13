@@ -9,7 +9,12 @@ import { Role } from './../src/auth/enums/role.enum';
 import { HttpAdapterHost } from '@nestjs/core';
 import { AllExceptionsFilter } from './../src/common/filters/all-exceptions.filter';
 import { ConfigService } from '@nestjs/config';
-import { AppointmentStatus, SlotStatus, BookingType, QueueStatus } from '@prisma/client';
+import {
+  AppointmentStatus,
+  SlotStatus,
+  BookingType,
+  QueueStatus,
+} from '@prisma/client';
 
 describe('Medical Record Module (e2e) - Kịch bản kiểm thử tiếng Việt', () => {
   let app: INestApplication<App>;
@@ -62,7 +67,9 @@ describe('Medical Record Module (e2e) - Kịch bản kiểm thử tiếng Việt
     prisma = app.get<PrismaService>(PrismaService);
     jwtService = app.get<JwtService>(JwtService);
     configService = app.get<ConfigService>(ConfigService);
-    jwtSecret = configService.get<string>('JWT_ACCESS_SECRET') || 'default_access_secret_123';
+    jwtSecret =
+      configService.get<string>('JWT_ACCESS_SECRET') ||
+      'default_access_secret_123';
 
     // Đăng ký pipe và filter
     app.setGlobalPrefix('api');
@@ -82,12 +89,20 @@ describe('Medical Record Module (e2e) - Kịch bản kiểm thử tiếng Việt
     await app.init();
 
     // 1. Lấy Role ID từ Database
-    const patientRole = await prisma.role.findUnique({ where: { code: Role.PATIENT } });
-    const doctorRole = await prisma.role.findUnique({ where: { code: Role.DOCTOR } });
-    const receptionistRole = await prisma.role.findUnique({ where: { code: Role.RECEPTIONIST } });
+    const patientRole = await prisma.role.findUnique({
+      where: { code: Role.PATIENT },
+    });
+    const doctorRole = await prisma.role.findUnique({
+      where: { code: Role.DOCTOR },
+    });
+    const receptionistRole = await prisma.role.findUnique({
+      where: { code: Role.RECEPTIONIST },
+    });
 
     if (!patientRole || !doctorRole || !receptionistRole) {
-      throw new Error('Không tìm thấy các Role cần thiết trong DB. Vui lòng chạy seed trước.');
+      throw new Error(
+        'Không tìm thấy các Role cần thiết trong DB. Vui lòng chạy seed trước.',
+      );
     }
 
     patientRoleId = patientRole.id;
@@ -200,11 +215,38 @@ describe('Medical Record Module (e2e) - Kịch bản kiểm thử tiếng Việt
     receptionistId = receptionistUser.id;
 
     // Ký cấp tokens
-    patientToken = jwtService.sign({ sub: patientId, email: patientUser.email, role: Role.PATIENT }, { secret: jwtSecret });
-    otherPatientToken = jwtService.sign({ sub: otherPatientId, email: otherPatientUser.email, role: Role.PATIENT }, { secret: jwtSecret });
-    doctorToken = jwtService.sign({ sub: doctorUserId, email: doctorUser.email, role: Role.DOCTOR }, { secret: jwtSecret });
-    otherDoctorToken = jwtService.sign({ sub: otherDoctorUserId, email: otherDoctorUser.email, role: Role.DOCTOR }, { secret: jwtSecret });
-    receptionistToken = jwtService.sign({ sub: receptionistId, email: receptionistUser.email, role: Role.RECEPTIONIST }, { secret: jwtSecret });
+    patientToken = jwtService.sign(
+      { sub: patientId, email: patientUser.email, role: Role.PATIENT },
+      { secret: jwtSecret },
+    );
+    otherPatientToken = jwtService.sign(
+      {
+        sub: otherPatientId,
+        email: otherPatientUser.email,
+        role: Role.PATIENT,
+      },
+      { secret: jwtSecret },
+    );
+    doctorToken = jwtService.sign(
+      { sub: doctorUserId, email: doctorUser.email, role: Role.DOCTOR },
+      { secret: jwtSecret },
+    );
+    otherDoctorToken = jwtService.sign(
+      {
+        sub: otherDoctorUserId,
+        email: otherDoctorUser.email,
+        role: Role.DOCTOR,
+      },
+      { secret: jwtSecret },
+    );
+    receptionistToken = jwtService.sign(
+      {
+        sub: receptionistId,
+        email: receptionistUser.email,
+        role: Role.RECEPTIONIST,
+      },
+      { secret: jwtSecret },
+    );
 
     // Seed Ca làm việc & Slot
     const tomorrow = new Date();
@@ -255,7 +297,13 @@ describe('Medical Record Module (e2e) - Kịch bản kiểm thử tiếng Việt
 
   async function cleanUpData() {
     try {
-      const userIds = [patientId, otherPatientId, doctorUserId, otherDoctorUserId, receptionistId].filter(Boolean);
+      const userIds = [
+        patientId,
+        otherPatientId,
+        doctorUserId,
+        otherDoctorUserId,
+        receptionistId,
+      ].filter(Boolean);
 
       // Xóa MedicalRecord trước do có khóa ngoại
       await prisma.medicalRecord.deleteMany({
@@ -413,8 +461,10 @@ describe('Medical Record Module (e2e) - Kịch bản kiểm thử tiếng Việt
       const recordPayload = {
         appointmentId: testAppointmentId,
         diagnosis: 'Viêm ruột thừa cấp nhẹ',
-        treatment: 'Phẫu thuật cắt bỏ ruột thừa nội soi, dùng kháng sinh sau mổ',
-        prescription: 'Amoxicillin 500mg x 15 viên, Paracetamol 500mg x 10 viên',
+        treatment:
+          'Phẫu thuật cắt bỏ ruột thừa nội soi, dùng kháng sinh sau mổ',
+        prescription:
+          'Amoxicillin 500mg x 15 viên, Paracetamol 500mg x 10 viên',
         notes: 'Kiêng đồ ăn nhiều dầu mỡ, tái khám sau 7 ngày',
         followUpDate: new Date('2026-07-04').toISOString(),
       };
@@ -427,8 +477,12 @@ describe('Medical Record Module (e2e) - Kịch bản kiểm thử tiếng Việt
 
       expect(response.body.message).toContain('Lập hồ sơ bệnh án thành công');
       expect(response.body.data.medicalRecord).toBeDefined();
-      expect(response.body.data.medicalRecord.diagnosis).toBe(recordPayload.diagnosis);
-      expect(response.body.data.appointment.status).toBe(AppointmentStatus.COMPLETED);
+      expect(response.body.data.medicalRecord.diagnosis).toBe(
+        recordPayload.diagnosis,
+      );
+      expect(response.body.data.appointment.status).toBe(
+        AppointmentStatus.COMPLETED,
+      );
       expect(response.body.data.queueEntry.status).toBe(QueueStatus.DONE);
 
       testMedicalRecordId = response.body.data.medicalRecord.id;
@@ -441,7 +495,9 @@ describe('Medical Record Module (e2e) - Kịch bản kiểm thử tiếng Việt
       expect(dbAppointment?.status).toBe(AppointmentStatus.COMPLETED);
       expect(dbAppointment?.queueEntry?.status).toBe(QueueStatus.DONE);
       expect(dbAppointment?.medicalRecord).toBeDefined();
-      expect(dbAppointment?.medicalRecord?.diagnosis).toBe(recordPayload.diagnosis);
+      expect(dbAppointment?.medicalRecord?.diagnosis).toBe(
+        recordPayload.diagnosis,
+      );
     });
 
     it('8. Tạo trùng bệnh án cho một cuộc hẹn -> Thất bại 409 Conflict', async () => {
@@ -481,9 +537,11 @@ describe('Medical Record Module (e2e) - Kịch bản kiểm thử tiếng Việt
     it('3. Bác sĩ chính chỉnh sửa bệnh án của chính mình lập -> Thành công 200 OK', async () => {
       const updatePayload = {
         diagnosis: 'Viêm ruột thừa cấp hoại tử chưa vỡ',
-        treatment: 'Phẫu thuật cắt ruột thừa nội soi cấp cứu, truyền dịch và kháng sinh thế hệ 3',
+        treatment:
+          'Phẫu thuật cắt ruột thừa nội soi cấp cứu, truyền dịch và kháng sinh thế hệ 3',
         prescription: 'Cefuroxime 500mg x 20 viên, Paracetamol 500mg x 15 viên',
-        notes: 'Thay băng vết mổ mỗi ngày, quay lại viện ngay nếu sốt hoặc đau bụng dữ dội',
+        notes:
+          'Thay băng vết mổ mỗi ngày, quay lại viện ngay nếu sốt hoặc đau bụng dữ dội',
       };
 
       const response = await request(app.getHttpServer())
@@ -492,7 +550,9 @@ describe('Medical Record Module (e2e) - Kịch bản kiểm thử tiếng Việt
         .send(updatePayload)
         .expect(HttpStatus.OK);
 
-      expect(response.body.message).toContain('Cập nhật hồ sơ bệnh án thành công');
+      expect(response.body.message).toContain(
+        'Cập nhật hồ sơ bệnh án thành công',
+      );
       expect(response.body.data.diagnosis).toBe(updatePayload.diagnosis);
       expect(response.body.data.treatment).toBe(updatePayload.treatment);
       expect(response.body.data.prescription).toBe(updatePayload.prescription);
@@ -517,7 +577,9 @@ describe('Medical Record Module (e2e) - Kịch bản kiểm thử tiếng Việt
       expect(response.body.data.length).toBeGreaterThanOrEqual(1);
       expect(response.body.data[0].id).toBe(testMedicalRecordId);
       expect(response.body.data[0].doctorName).toBe('BS. Trần Văn Bệnh Án');
-      expect(response.body.data[0].specialtyName).toBe('Khoa Ngoại Nhi Test Medical Record');
+      expect(response.body.data[0].specialtyName).toBe(
+        'Khoa Ngoại Nhi Test Medical Record',
+      );
       expect(response.body.meta.total).toBeGreaterThanOrEqual(1);
     });
 

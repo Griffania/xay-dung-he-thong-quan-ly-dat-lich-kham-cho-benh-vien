@@ -22,10 +22,9 @@ import { UpdateQueueStatusDto } from './dto/update-status.dto';
 export class QueuesController {
   constructor(private readonly queuesService: QueuesService) {}
 
-  
-   //Check-in cuộc hẹn để đưa vào hàng đợi
-   // Quyền truy cập: PATIENT, RECEPTIONIST, ADMIN
-   
+  //Check-in cuộc hẹn để đưa vào hàng đợi
+  // Quyền truy cập: PATIENT, RECEPTIONIST, ADMIN
+
   @Post('check-in')
   @UseGuards(RolesGuard)
   @Roles(Role.PATIENT, Role.RECEPTIONIST, Role.ADMIN)
@@ -33,10 +32,9 @@ export class QueuesController {
     return this.queuesService.checkIn(checkInDto.appointmentId, req.user);
   }
 
-  
-    //Giám sát hàng đợi phòng khám hôm nay hoặc theo ngày cụ thể
-   // Quyền truy cập: Tất cả các vai trò đã đăng nhập
-   
+  //Giám sát hàng đợi phòng khám hôm nay hoặc theo ngày cụ thể
+  // Quyền truy cập: Tất cả các vai trò đã đăng nhập
+
   @Get('monitor')
   async getQueueMonitor(
     @Query('doctorId') doctorId?: string,
@@ -46,10 +44,9 @@ export class QueuesController {
     return this.queuesService.getQueueMonitor({ doctorId, specialtyId, date });
   }
 
-  
-   // Cập nhật trạng thái lượt khám trong hàng đợi (Ví dụ: Gọi khám -> Bắt đầu khám -> Khám xong)
-   //Quyền truy cập: DOCTOR, RECEPTIONIST, ADMIN
-   
+  // Cập nhật trạng thái lượt khám trong hàng đợi (Ví dụ: Gọi khám -> Bắt đầu khám -> Khám xong)
+  //Quyền truy cập: DOCTOR, RECEPTIONIST, ADMIN
+
   @Patch(':id/status')
   @UseGuards(RolesGuard)
   @Roles(Role.DOCTOR, Role.RECEPTIONIST, Role.ADMIN)
@@ -58,6 +55,10 @@ export class QueuesController {
     @Body() updateStatusDto: UpdateQueueStatusDto,
     @Req() req: any,
   ) {
-    return this.queuesService.updateQueueStatus(id, updateStatusDto.status, req.user);
+    return this.queuesService.updateQueueStatus(
+      id,
+      updateStatusDto.status,
+      req.user,
+    );
   }
 }

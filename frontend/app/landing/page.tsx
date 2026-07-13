@@ -13,22 +13,22 @@ const DOCTORS = [
   {
     name: "Bs. CKI BSNT Mai Thị Hương Lan",
     role: "Trưởng khoa Nội thần kinh",
-    image: "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=600",
+    image: "",
   },
   {
     name: "Ths. Bs. CKII Nguyễn Ngọc Thao",
     role: "Giám Đốc Y Khoa Bệnh viện",
-    image: "https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&q=80&w=600",
+    image: "",
   },
   {
     name: "Bs. CKII Nguyễn Trường Sơn",
     role: "Trưởng đơn vị khám sức khỏe",
-    image: "https://images.unsplash.com/photo-1537368910025-700350fe46c7?auto=format&fit=crop&q=80&w=600",
+    image: "",
   },
   {
     name: "Bs. CKII Nguyễn Đình Tiến",
     role: "Trưởng khoa Phẫu thuật - Gây mê hồi sức",
-    image: "https://images.unsplash.com/photo-1594824813573-246434de83fb?auto=format&fit=crop&q=80&w=600",
+    image: "",
   },
 ];
 
@@ -36,15 +36,15 @@ const DOCTORS = [
 const SPECIALTIES = [
   {
     title: "Ung bướu",
-    image: "https://images.unsplash.com/photo-1579684389782-64d84b5e901d?auto=format&fit=crop&q=80&w=600",
+    image: "",
   },
   {
     title: "Tim mạch",
-    image: "https://images.unsplash.com/photo-1584515979956-d9f6e5d09982?auto=format&fit=crop&q=80&w=600",
+    image: "",
   },
   {
     title: "Ngoại tiêu hóa",
-    image: "https://images.unsplash.com/photo-1629909613654-28e377c37b09?auto=format&fit=crop&q=80&w=600",
+    image: "",
   }
 ];
 
@@ -150,7 +150,6 @@ export default function LandingPage() {
             </div>
           </div>
         )}
-
         <div className="container navbar">
           {/* Logo Bệnh viện */}
           <Link href="/" className="logo-link">
@@ -166,7 +165,6 @@ export default function LandingPage() {
               <span className="logo-sub">Sài Gòn</span>
             </div>
           </Link>
-
           {/* Menu Desktop */}
           <nav className="nav-menu">
             <Link href="#introduction" className="nav-link">Bệnh viện C-Clinic Sài Gòn</Link>
@@ -174,7 +172,6 @@ export default function LandingPage() {
             <Link href="#doctors" className="nav-link">Bác sĩ</Link>
             <Link href="#footer" className="nav-link">Về C-Clinic</Link>
           </nav>
-
           {/* Nút đăng ký, đăng nhập & đặt lịch Desktop */}
           <div className="header-actions">
             {isLoggedIn ? (
@@ -245,13 +242,6 @@ export default function LandingPage() {
                 alt="Hoan My Hospital"
                 className="hero-img"
               />
-              <div className="stats-card">
-                <div className="stats-num">25+</div>
-                <div className="stats-text">
-                  <h4>Năm thành lập</h4>
-                  <p>Chăm sóc y tế chất lượng cao từ năm 1999</p>
-                </div>
-              </div>
             </div>
           </div>
         </div>

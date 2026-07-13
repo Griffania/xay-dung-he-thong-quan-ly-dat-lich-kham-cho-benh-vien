@@ -26,7 +26,6 @@ export default function SpecialtyManagementPage() {
   const [specialties, setSpecialties] = useState<Specialty[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
   const [limit] = useState(100);
   const [total, setTotal] = useState(0);
 
@@ -46,7 +45,6 @@ export default function SpecialtyManagementPage() {
     setIsLoading(true);
     try {
       const params: any = {
-        page: page.toString(),
         limit: limit.toString()
       };
       if (search) params.search = search;
@@ -68,7 +66,7 @@ export default function SpecialtyManagementPage() {
 
   useEffect(() => {
     fetchSpecialties();
-  }, [page, search]);
+  }, [ search]);
 
   const handleOpenCreate = () => {
     setIsEdit(false);
@@ -160,7 +158,7 @@ export default function SpecialtyManagementPage() {
           <input
             type="text"
             value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            onChange={(e) => { setSearch(e.target.value);}}
             placeholder="Tìm theo Tên chuyên khoa..."
             className="search-input"
           />

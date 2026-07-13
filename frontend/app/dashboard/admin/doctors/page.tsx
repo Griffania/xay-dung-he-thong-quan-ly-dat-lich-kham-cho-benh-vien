@@ -42,13 +42,32 @@ interface Doctor {
   };
 }
 
+const timeOptions = Array.from({ length: 48 }, (_, i) => {
+  const hour = Math.floor(i / 2).toString().padStart(2, '0');
+  const min = (i % 2 === 0 ? '00' : '30');
+  return `${hour}:${min}`;
+});
+
+const getTimeFriendlyLabel = (timeStr: string) => {
+  if (!timeStr) return '';
+  const parts = timeStr.split(':');
+  const hour = parseInt(parts[0], 10);
+  const min = parts[1] || '00';
+  if (isNaN(hour)) return timeStr;
+  
+  if (hour === 0) return `${timeStr} - Nửa đêm`;
+  if (hour < 12) return `${timeStr} - Sáng`;
+  if (hour === 12) return `${timeStr} - Trưa`;
+  if (hour < 18) return `${timeStr} - Chiều`;
+  return `${timeStr} - Tối`;
+};
+
 export default function DoctorManagementPage() {
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [specialties, setSpecialties] = useState<Specialty[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [specialtyFilter, setSpecialtyFilter] = useState('');
-  const [page, setPage] = useState(1);
   const [limit] = useState(200);
   const [total, setTotal] = useState(0);
 
@@ -92,7 +111,6 @@ export default function DoctorManagementPage() {
     setIsLoading(true);
     try {
       const params: any = {
-        page: page.toString(),
         limit: limit.toString()
       };
       if (search) params.search = search;
@@ -119,7 +137,7 @@ export default function DoctorManagementPage() {
 
   useEffect(() => {
     fetchDoctors();
-  }, [page, search, specialtyFilter]);
+  }, [ search, specialtyFilter]);
 
   // Toggle Doctor Active status
   const handleToggleActive = async (doctor: Doctor) => {
@@ -175,15 +193,45 @@ export default function DoctorManagementPage() {
     }
   };
 
+  // Mở modal lập lịch và đặt lại các giá trị mặc định tránh lưu dữ liệu cũ bị lỗi
+  const handleOpenScheduleModal = (doctor: Doctor) => {
+    setSelectedDoctor(doctor);
+    setWorkDate('');
+    setStartTime('08:00');
+    setEndTime('12:00');
+    setSlotDurationMin(15);
+    setScheduleError(null);
+    setScheduleSuccess(null);
+    setShowScheduleModal(true);
+  };
+
   // Thêm lịch làm việc
   const handleCreateSchedule = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedDoctor) return;
-    setScheduleError(null);
+    setScheduleError(null);//Xóa (reset) các thông báo lỗi hoặc thông báo thành công của lần xếp lịch trước đó
     setScheduleSuccess(null);
-    setIsSavingSchedule(true);
+    setIsSavingSchedule(true);//Chuyển trạng thái hiển thị của Modal thành true
 
     try {
+      // Validate thời gian phía Frontend
+      const startNum = startTime.split(':').map(Number);
+      const endNum = endTime.split(':').map(Number);
+      const startMinutes = startNum[0] * 60 + startNum[1];
+      const endMinutes = endNum[0] * 60 + endNum[1];
+
+      if (startMinutes >= endMinutes) {
+        setScheduleError('Thời gian bắt đầu phải nhỏ hơn thời gian kết thúc!');
+        setIsSavingSchedule(false);
+        return;
+      }
+
+      if (endMinutes - startMinutes < Number(slotDurationMin)) {
+        setScheduleError(`Tổng thời gian làm việc phải lớn hơn hoặc bằng thời lượng một slot khám (${slotDurationMin} phút)!`);
+        setIsSavingSchedule(false);
+        return;
+      }
+
       await api.post('/work-schedules', {
         doctorId: selectedDoctor.id,
         workDate,
@@ -240,7 +288,7 @@ export default function DoctorManagementPage() {
           <input
             type="text"
             value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            onChange={(e) => { setSearch(e.target.value);}}
             placeholder="Tìm bác sĩ theo Tên, Email, Giấy phép..."
             className="search-input"
           />
@@ -248,7 +296,7 @@ export default function DoctorManagementPage() {
 
         <select
           value={specialtyFilter}
-          onChange={(e) => { setSpecialtyFilter(e.target.value); setPage(1); }}
+          onChange={(e) => { setSpecialtyFilter(e.target.value); }}
           className="select-control"
           style={{ width: '14rem' }}
         >
@@ -310,7 +358,7 @@ export default function DoctorManagementPage() {
               {/* Actions row */}
               <div className="doctor-card-footer">
                 <button
-                  onClick={() => { setSelectedDoctor(doc); setShowScheduleModal(true); }}
+                  onClick={() => handleOpenScheduleModal(doc)}
                   className="btn btn-secondary"
                   style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
                 >
@@ -472,25 +520,33 @@ export default function DoctorManagementPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label">Giờ bắt đầu</label>
-                  <input
-                    type="time"
+                  <select
                     required
                     value={startTime}
                     onChange={(e) => setStartTime(e.target.value)}
-                    className="input-control"
-                    style={{ paddingLeft: '1rem' }}
-                  />
+                    className="select-control w-full"
+                  >
+                    {timeOptions.map((time) => (
+                      <option key={time} value={time}>
+                        {getTimeFriendlyLabel(time)}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label">Giờ kết thúc</label>
-                  <input
-                    type="time"
+                  <select
                     required
                     value={endTime}
                     onChange={(e) => setEndTime(e.target.value)}
-                    className="input-control"
-                    style={{ paddingLeft: '1rem' }}
-                  />
+                    className="select-control w-full"
+                  >
+                    {timeOptions.map((time) => (
+                      <option key={time} value={time}>
+                        {getTimeFriendlyLabel(time)}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 

@@ -8,7 +8,6 @@ import {
   IsUUID,
 } from 'class-validator';
 
-
 export class CreateDoctorDto {
   // --- Thông tin tài khoản người dùng (User Account) ---
 

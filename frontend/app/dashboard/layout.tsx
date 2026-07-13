@@ -84,14 +84,14 @@ export default function DashboardLayout({
       case 'DOCTOR':
         return [
           { label: 'Lịch khám bệnh', href: '/dashboard/doctor', icon: Calendar },
-          { label: 'Hàng đợi khám', href: '/dashboard/doctor#queue', icon: Activity },
-          { label: 'Hồ sơ bệnh án', href: '/dashboard/doctor#records', icon: ClipboardList },
+          { label: 'Hàng đợi khám', href: '/dashboard/doctor/queue', icon: Activity },
+          { label: 'Hồ sơ bệnh án', href: '/dashboard/doctor/records', icon: ClipboardList },
         ];
       case 'RECEPTIONIST':
         return [
           { label: 'Quầy tiếp đón', href: '/dashboard/receptionist', icon: HeartHandshake },
-          { label: 'Xếp hàng & Điều phối', href: '/dashboard/receptionist#queue', icon: Activity },
-          { label: 'Đặt lịch hẹn mới', href: '/dashboard/receptionist#bookings', icon: Calendar },
+          { label: 'Xếp hàng & Điều phối', href: '/dashboard/receptionist/queue', icon: Activity },
+          { label: 'Đặt lịch hẹn mới', href: '/dashboard/receptionist/booking', icon: Calendar },
         ];
       case 'PATIENT':
         return [

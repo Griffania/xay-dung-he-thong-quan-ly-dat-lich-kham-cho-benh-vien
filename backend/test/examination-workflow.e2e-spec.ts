@@ -9,7 +9,12 @@ import { Role } from './../src/auth/enums/role.enum';
 import { HttpAdapterHost } from '@nestjs/core';
 import { AllExceptionsFilter } from './../src/common/filters/all-exceptions.filter';
 import { ConfigService } from '@nestjs/config';
-import { AppointmentStatus, SlotStatus, BookingType, QueueStatus } from '@prisma/client';
+import {
+  AppointmentStatus,
+  SlotStatus,
+  BookingType,
+  QueueStatus,
+} from '@prisma/client';
 
 describe('Doctor Examination Workflow (e2e)', () => {
   let app: INestApplication<App>;
@@ -69,12 +74,20 @@ describe('Doctor Examination Workflow (e2e)', () => {
     await app.init();
 
     // 1. Lấy Role ID cho PATIENT, DOCTOR, RECEPTIONIST từ Database
-    const patientRole = await prisma.role.findUnique({ where: { code: Role.PATIENT } });
-    const doctorRole = await prisma.role.findUnique({ where: { code: Role.DOCTOR } });
-    const receptionistRole = await prisma.role.findUnique({ where: { code: Role.RECEPTIONIST } });
+    const patientRole = await prisma.role.findUnique({
+      where: { code: Role.PATIENT },
+    });
+    const doctorRole = await prisma.role.findUnique({
+      where: { code: Role.DOCTOR },
+    });
+    const receptionistRole = await prisma.role.findUnique({
+      where: { code: Role.RECEPTIONIST },
+    });
 
     if (!patientRole || !doctorRole || !receptionistRole) {
-      throw new Error('Không tìm thấy các Role cần thiết trong DB. Vui lòng chạy seed trước.');
+      throw new Error(
+        'Không tìm thấy các Role cần thiết trong DB. Vui lòng chạy seed trước.',
+      );
     }
 
     patientRoleId = patientRole.id;
@@ -88,7 +101,8 @@ describe('Doctor Examination Workflow (e2e)', () => {
     const specialty = await prisma.specialty.create({
       data: {
         name: 'Khoa Ngoại Tổng Quát Test Workflow',
-        description: 'Chuyên khoa ngoại tổng quát dùng cho test workflow khám bệnh',
+        description:
+          'Chuyên khoa ngoại tổng quát dùng cho test workflow khám bệnh',
         isActive: true,
       },
     });
@@ -148,9 +162,22 @@ describe('Doctor Examination Workflow (e2e)', () => {
     receptionistId = receptionistUser.id;
 
     // Ký phát token cho các vai trò để gọi API
-    patientToken = jwtService.sign({ sub: patientId, email: patientUser.email, role: Role.PATIENT }, { secret: jwtSecret, expiresIn: '15m' });
-    doctorToken = jwtService.sign({ sub: doctorUserId, email: doctorUser.email, role: Role.DOCTOR }, { secret: jwtSecret, expiresIn: '15m' });
-    receptionistToken = jwtService.sign({ sub: receptionistId, email: receptionistUser.email, role: Role.RECEPTIONIST }, { secret: jwtSecret, expiresIn: '15m' });
+    patientToken = jwtService.sign(
+      { sub: patientId, email: patientUser.email, role: Role.PATIENT },
+      { secret: jwtSecret, expiresIn: '15m' },
+    );
+    doctorToken = jwtService.sign(
+      { sub: doctorUserId, email: doctorUser.email, role: Role.DOCTOR },
+      { secret: jwtSecret, expiresIn: '15m' },
+    );
+    receptionistToken = jwtService.sign(
+      {
+        sub: receptionistId,
+        email: receptionistUser.email,
+        role: Role.RECEPTIONIST,
+      },
+      { secret: jwtSecret, expiresIn: '15m' },
+    );
 
     // 6. Seed ca làm việc (WorkSchedule) và Slot khám trống cho ngày mai
     const tomorrow = new Date();
@@ -201,7 +228,9 @@ describe('Doctor Examination Workflow (e2e)', () => {
 
   async function cleanUpData() {
     try {
-      const userIdsToDelete = [patientId, doctorUserId, receptionistId].filter(Boolean) as string[];
+      const userIdsToDelete = [patientId, doctorUserId, receptionistId].filter(
+        Boolean,
+      );
 
       await prisma.appointment.deleteMany({
         where: {
@@ -269,7 +298,9 @@ describe('Doctor Examination Workflow (e2e)', () => {
         .expect(HttpStatus.OK);
 
       expect(response.body.message).toContain('checkin thành công');
-      expect(response.body.data.appointment.status).toBe(AppointmentStatus.CHECKED_IN);
+      expect(response.body.data.appointment.status).toBe(
+        AppointmentStatus.CHECKED_IN,
+      );
       expect(response.body.data.queueEntry.status).toBe(QueueStatus.WAITING);
       expect(response.body.data.queueEntry.queueNo).toBeGreaterThanOrEqual(1);
 
@@ -296,8 +327,12 @@ describe('Doctor Examination Workflow (e2e)', () => {
         .expect(HttpStatus.OK);
 
       expect(response.body.message).toContain('bắt đầu khám bệnh thành công');
-      expect(response.body.data.appointment.status).toBe(AppointmentStatus.IN_PROGRESS);
-      expect(response.body.data.queueEntry.status).toBe(QueueStatus.IN_PROGRESS);
+      expect(response.body.data.appointment.status).toBe(
+        AppointmentStatus.IN_PROGRESS,
+      );
+      expect(response.body.data.queueEntry.status).toBe(
+        QueueStatus.IN_PROGRESS,
+      );
       expect(response.body.data.queueEntry.startedAt).not.toBeNull();
 
       // Kiểm tra DB
@@ -322,9 +357,12 @@ describe('Doctor Examination Workflow (e2e)', () => {
     it('6. Bác sĩ hoàn thành khám -> Chuyển sang COMPLETED, hàng đợi DONE, tạo MedicalRecord', async () => {
       const diagnosisData = {
         diagnosis: 'Rối loạn tiền đình cấp tính',
-        treatment: 'Nghỉ ngơi tại chỗ, dùng thuốc giảm đau, tránh ánh sáng mạnh',
-        prescription: 'Ginkgo Biloba 120mg x 30 viên, Paracetamol 500mg x 10 viên',
-        notes: 'Uống thuốc sau khi ăn no, tái khám nếu đau đầu dữ dội kèm buồn nôn',
+        treatment:
+          'Nghỉ ngơi tại chỗ, dùng thuốc giảm đau, tránh ánh sáng mạnh',
+        prescription:
+          'Ginkgo Biloba 120mg x 30 viên, Paracetamol 500mg x 10 viên',
+        notes:
+          'Uống thuốc sau khi ăn no, tái khám nếu đau đầu dữ dội kèm buồn nôn',
         followUpDate: new Date('2026-07-10').toISOString(),
       };
 
@@ -334,8 +372,12 @@ describe('Doctor Examination Workflow (e2e)', () => {
         .send(diagnosisData)
         .expect(HttpStatus.OK);
 
-      expect(response.body.message).toContain('hoàn thành khám bệnh và lập hồ sơ bệnh án thành công');
-      expect(response.body.data.appointment.status).toBe(AppointmentStatus.COMPLETED);
+      expect(response.body.message).toContain(
+        'hoàn thành khám bệnh và lập hồ sơ bệnh án thành công',
+      );
+      expect(response.body.data.appointment.status).toBe(
+        AppointmentStatus.COMPLETED,
+      );
       expect(response.body.data.queueEntry.status).toBe(QueueStatus.DONE);
       expect(response.body.data.queueEntry.completedAt).not.toBeNull();
 
@@ -356,7 +398,9 @@ describe('Doctor Examination Workflow (e2e)', () => {
       });
       expect(dbAppointment?.status).toBe(AppointmentStatus.COMPLETED);
       expect(dbAppointment?.queueEntry?.status).toBe(QueueStatus.DONE);
-      expect(dbAppointment?.medicalRecord?.diagnosis).toBe(diagnosisData.diagnosis);
+      expect(dbAppointment?.medicalRecord?.diagnosis).toBe(
+        diagnosisData.diagnosis,
+      );
     });
   });
 
@@ -391,7 +435,9 @@ describe('Doctor Examination Workflow (e2e)', () => {
         .set('Authorization', `Bearer ${doctorToken}`)
         .expect(HttpStatus.OK);
 
-      expect(response.body.message).toContain('đánh dấu bệnh nhân vắng khám thành công');
+      expect(response.body.message).toContain(
+        'đánh dấu bệnh nhân vắng khám thành công',
+      );
       expect(response.body.data.status).toBe(AppointmentStatus.NO_SHOW);
       expect(response.body.data.queueEntry.status).toBe(QueueStatus.NO_SHOW);
 

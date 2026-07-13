@@ -25,7 +25,7 @@ export class WorkSchedulesService {
     return date;
   }
   // Chuyển đổi chuỗi giờ HH:mm hoặc HH:mm:ss thành đối tượng Date với mốc ngày cố định 1970-01-01 UTC
-   
+
   private parseTime(timeStr: string): Date {
     let formattedTime = timeStr;
     if (timeStr.length === 5) {
@@ -40,7 +40,7 @@ export class WorkSchedulesService {
     return date;
   }
   // Tạo lịch làm việc mới cho Bác sĩ (chỉ ADMIN có quyền)
-   
+
   async create(createWorkScheduleDto: CreateWorkScheduleDto) {
     const {
       doctorId,
@@ -223,7 +223,7 @@ export class WorkSchedulesService {
     };
   }
   // Lấy chi tiết lịch làm việc theo ID
-   
+
   async findOne(id: string, user: any) {
     const schedule = await this.prisma.workSchedule.findUnique({
       where: { id },
@@ -269,7 +269,7 @@ export class WorkSchedulesService {
     return schedule;
   }
   // Cập nhật thông tin lịch làm việc và làm mới các slot (chỉ ADMIN có quyền)
-   
+
   async update(id: string, updateWorkScheduleDto: UpdateWorkScheduleDto) {
     // 1. Kiểm tra sự tồn tại của ca làm việc
     const schedule = await this.prisma.workSchedule.findUnique({
@@ -387,7 +387,7 @@ export class WorkSchedulesService {
     };
   }
   // Xóa lịch làm việc (chỉ ADMIN có quyền)
-  
+
   async delete(id: string) {
     // 1. Kiểm tra tồn tại
     const schedule = await this.prisma.workSchedule.findUnique({
