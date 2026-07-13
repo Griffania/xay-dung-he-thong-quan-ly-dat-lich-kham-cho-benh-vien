@@ -19,23 +19,25 @@ export class QueuesService {
     private readonly appointmentsService: AppointmentsService,
   ) {}
 
-  
-   // Check-in cuộc hẹn để đưa vào hàng đợi
-   
+  // Check-in cuộc hẹn để đưa vào hàng đợi
+
   async checkIn(appointmentId: string, currentUser: any) {
     // Ủy quyền hoàn toàn cho AppointmentsService.checkIn để tránh trùng lặp logic
     return this.appointmentsService.checkIn(appointmentId, currentUser);
   }
 
-  
-   //Giám sát hàng đợi khám bệnh (Cho cả phòng khám hoặc từng bác sĩ)
-   
-  async getQueueMonitor(query: { doctorId?: string; specialtyId?: string; date?: string }) {
+  //Giám sát hàng đợi khám bệnh (Cho cả phòng khám hoặc từng bác sĩ)
+
+  async getQueueMonitor(query: {
+    doctorId?: string;
+    specialtyId?: string;
+    date?: string;
+  }) {
     const targetDate = query.date ? new Date(query.date) : new Date();
-    
+
     const startOfDay = new Date(targetDate);
     startOfDay.setHours(0, 0, 0, 0);
-    
+
     const endOfDay = new Date(targetDate);
     endOfDay.setHours(23, 59, 59, 999);
 
@@ -115,10 +117,17 @@ export class QueuesService {
         .map(formatQueueEntry)
         .sort((a, b) => (a?.estimatedWait || 0) - (b?.estimatedWait || 0));
 
-      const currentlyExaminingRaw = entries.find((e) => e.status === QueueStatus.IN_PROGRESS) || null;
-      const currentlyExamining = currentlyExaminingRaw ? formatQueueEntry(currentlyExaminingRaw) : null;
-      const completedList = entries.filter((e) => e.status === QueueStatus.DONE).map(formatQueueEntry);
-      const noShowList = entries.filter((e) => e.status === QueueStatus.NO_SHOW).map(formatQueueEntry);
+      const currentlyExaminingRaw =
+        entries.find((e) => e.status === QueueStatus.IN_PROGRESS) || null;
+      const currentlyExamining = currentlyExaminingRaw
+        ? formatQueueEntry(currentlyExaminingRaw)
+        : null;
+      const completedList = entries
+        .filter((e) => e.status === QueueStatus.DONE)
+        .map(formatQueueEntry);
+      const noShowList = entries
+        .filter((e) => e.status === QueueStatus.NO_SHOW)
+        .map(formatQueueEntry);
 
       return {
         doctorId: query.doctorId,
@@ -165,17 +174,20 @@ export class QueuesService {
     // Sắp xếp waitingList của từng bác sĩ theo thứ tự ưu tiên
     for (const docId of Object.keys(doctorQueues)) {
       doctorQueues[docId].waitingList.sort(
-        (a: any, b: any) => (a?.estimatedWait || 0) - (b?.estimatedWait || 0)
+        (a: any, b: any) => (a?.estimatedWait || 0) - (b?.estimatedWait || 0),
       );
     }
 
     return Object.values(doctorQueues);
   }
 
-  
-    //Cập nhật trạng thái lượt khám trong hàng đợi (WAITING -> IN_PROGRESS -> DONE / NO_SHOW)
-   
-  async updateQueueStatus(id: string, newStatus: QueueStatus, currentUser: any) {
+  //Cập nhật trạng thái lượt khám trong hàng đợi (WAITING -> IN_PROGRESS -> DONE / NO_SHOW)
+
+  async updateQueueStatus(
+    id: string,
+    newStatus: QueueStatus,
+    currentUser: any,
+  ) {
     // Tìm lượt khám
     const queueEntry = await this.prisma.queueEntry.findUnique({
       where: { id },
@@ -194,7 +206,9 @@ export class QueuesService {
         where: { userId: currentUser.userId },
       });
       if (!doctor || queueEntry.doctorId !== doctor.id) {
-        throw new ForbiddenException('Bạn không có quyền cập nhật trạng thái hàng đợi của bác sĩ khác');
+        throw new ForbiddenException(
+          'Bạn không có quyền cập nhật trạng thái hàng đợi của bác sĩ khác',
+        );
       }
     }
 
@@ -320,13 +334,11 @@ export class QueuesService {
     });
   }
 
-  
-   // Tính toán lại thời gian chờ dự kiến cho tất cả các bệnh nhân đang WAITING của một bác sĩ
-  
-  
+  // Tính toán lại thời gian chờ dự kiến cho tất cả các bệnh nhân đang WAITING của một bác sĩ
+
   //Hàm tự động cấp số thứ tự khám tiếp theo cho bác sĩ trong ngày hôm nay.
-   // Số thứ tự là số nguyên dương tăng dần từ 1 để đảm bảo dễ theo dõi trong cơ sở dữ liệu.
-   
+  // Số thứ tự là số nguyên dương tăng dần từ 1 để đảm bảo dễ theo dõi trong cơ sở dữ liệu.
+
   async generateQueueNumber(tx: any, doctorId: string): Promise<number> {
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
@@ -350,22 +362,21 @@ export class QueuesService {
     return maxQueueEntry ? maxQueueEntry.queueNo + 1 : 1;
   }
 
+  // Định dạng số thứ tự in trên phiếu để phân biệt rõ ràng:
+  // OL-XXX cho bệnh nhân đặt lịch trực tuyến (ONLINE).
+  // WL-XXX cho bệnh nhân vãng lai đăng ký trực tiếp tại quầy (WALK_IN).
 
-   // Định dạng số thứ tự in trên phiếu để phân biệt rõ ràng:
-    // OL-XXX cho bệnh nhân đặt lịch trực tuyến (ONLINE).
-   // WL-XXX cho bệnh nhân vãng lai đăng ký trực tiếp tại quầy (WALK_IN).
-   
   formatQueueNumber(queueNo: number, bookingType: BookingType): string {
     const prefix = bookingType === BookingType.ONLINE ? 'OL' : 'WL';
     const padded = String(queueNo).padStart(3, '0');
     return `${prefix}-${padded}`;
   }
-   // Hàm sắp xếp thứ tự ưu tiên trong hàng đợi khám (WAITING):
-   // Nhóm 1 (ONLINE): Bệnh nhân đặt lịch trực tuyến đến đúng giờ (thời gian hiện tại chưa quá giờ hẹn quá 15 phút).
-   //  Nhóm này được sắp xếp theo giờ hẹn (slot.startTime) tăng dần.
-   // Nhóm 2 (WALK_IN / LATE): Bệnh nhân vãng lai đăng ký tại quầy + Bệnh nhân ONLINE đi trễ quá 15 phút.
-   //  Nhóm này được sắp xếp theo thời gian check-in (createdAt của QueueEntry) tăng dần.
-   // Trộn xen kẽ hai nhóm theo tỷ lệ: 2 ONLINE : 1 WALK_IN để tránh việc bệnh nhân vãng lai phải chờ vô tận.
+  // Hàm sắp xếp thứ tự ưu tiên trong hàng đợi khám (WAITING):
+  // Nhóm 1 (ONLINE): Bệnh nhân đặt lịch trực tuyến đến đúng giờ (thời gian hiện tại chưa quá giờ hẹn quá 15 phút).
+  //  Nhóm này được sắp xếp theo giờ hẹn (slot.startTime) tăng dần.
+  // Nhóm 2 (WALK_IN / LATE): Bệnh nhân vãng lai đăng ký tại quầy + Bệnh nhân ONLINE đi trễ quá 15 phút.
+  //  Nhóm này được sắp xếp theo thời gian check-in (createdAt của QueueEntry) tăng dần.
+  // Trộn xen kẽ hai nhóm theo tỷ lệ: 2 ONLINE : 1 WALK_IN để tránh việc bệnh nhân vãng lai phải chờ vô tận.
   arrangeQueue(entries: any[]): any[] {
     const now = new Date();
     const LATE_THRESHOLD_MIN = 15; // Ngưỡng đi trễ: 15 phút
@@ -381,9 +392,14 @@ export class QueuesService {
         // Tính mốc thời gian hẹn chính xác
         const slotDate = new Date(appointment.slot.date);
         const slotStartTime = new Date(appointment.slot.startTime);
-        
+
         const appointmentTime = new Date(slotDate);
-        appointmentTime.setHours(slotStartTime.getHours(), slotStartTime.getMinutes(), slotStartTime.getSeconds(), 0);
+        appointmentTime.setHours(
+          slotStartTime.getHours(),
+          slotStartTime.getMinutes(),
+          slotStartTime.getSeconds(),
+          0,
+        );
 
         // Đo khoảng thời gian bệnh nhân đi trễ
         const diffMs = now.getTime() - appointmentTime.getTime();
@@ -428,7 +444,11 @@ export class QueuesService {
         result.push(onlineQueue[onlineIdx++]);
       }
       // Đưa tối đa 1 bệnh nhân WALK_IN (hoặc đi trễ)
-      for (let i = 0; i < WALK_IN_RATIO && walkInIdx < walkInQueue.length; i++) {
+      for (
+        let i = 0;
+        i < WALK_IN_RATIO && walkInIdx < walkInQueue.length;
+        i++
+      ) {
         result.push(walkInQueue[walkInIdx++]);
       }
     }
@@ -436,15 +456,14 @@ export class QueuesService {
     return result;
   }
 
+  //Tính toán lại thời gian chờ dự kiến (estimatedWait) cho tất cả bệnh nhân WAITING của bác sĩ.
+  //Áp dụng thuật toán ước lượng thời gian chờ động:
+  // Tính hiệu suất khám thực tế của bác sĩ hôm nay = trung bình cộng thời gian khám các ca đã hoàn thành.
+  // Nếu bác sĩ chưa hoàn thành ca nào (hoặc < 3 ca), sử dụng slotDurationMin mặc định của ca làm việc.
+  // Tính thời gian còn lại của ca đang khám (nếu có ca đang IN_PROGRESS).
+  // Sắp xếp lại hàng đợi bằng thuật toán arrangeQueue.
+  // Cập nhật trường estimatedWait trong cơ sở dữ liệu dựa trên thứ tự hàng đợi mới.
 
-   //Tính toán lại thời gian chờ dự kiến (estimatedWait) cho tất cả bệnh nhân WAITING của bác sĩ.
-   //Áp dụng thuật toán ước lượng thời gian chờ động:
-   // Tính hiệu suất khám thực tế của bác sĩ hôm nay = trung bình cộng thời gian khám các ca đã hoàn thành.
-   // Nếu bác sĩ chưa hoàn thành ca nào (hoặc < 3 ca), sử dụng slotDurationMin mặc định của ca làm việc.
-   // Tính thời gian còn lại của ca đang khám (nếu có ca đang IN_PROGRESS).
-   // Sắp xếp lại hàng đợi bằng thuật toán arrangeQueue.
-   // Cập nhật trường estimatedWait trong cơ sở dữ liệu dựa trên thứ tự hàng đợi mới.
-   
   async recalculateWaitTimes(tx: any, doctorId: string): Promise<void> {
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
@@ -490,16 +509,21 @@ export class QueuesService {
     });
 
     if (firstActiveEntry?.appointment?.slot?.workSchedule?.slotDurationMin) {
-      averageServiceTime = firstActiveEntry.appointment.slot.workSchedule.slotDurationMin;
+      averageServiceTime =
+        firstActiveEntry.appointment.slot.workSchedule.slotDurationMin;
     }
 
     // Nếu bác sĩ đã khám xong tối thiểu 3 ca hôm nay, tính trung bình thực tế
     if (completedEntries.length >= 3) {
       let totalDurationMs = 0;
       for (const entry of completedEntries) {
-        totalDurationMs += new Date(entry.completedAt).getTime() - new Date(entry.startedAt).getTime();
+        totalDurationMs +=
+          new Date(entry.completedAt).getTime() -
+          new Date(entry.startedAt).getTime();
       }
-      const avgDurationMin = Math.round(totalDurationMs / (completedEntries.length * 1000 * 60));
+      const avgDurationMin = Math.round(
+        totalDurationMs / (completedEntries.length * 1000 * 60),
+      );
       if (avgDurationMin > 0) {
         averageServiceTime = avgDurationMin;
       }
@@ -520,7 +544,8 @@ export class QueuesService {
 
     let remainingTimeForCurrent = 0;
     if (inProgressEntry) {
-      const elapsedMs = new Date().getTime() - new Date(inProgressEntry.startedAt).getTime();
+      const elapsedMs =
+        new Date().getTime() - new Date(inProgressEntry.startedAt).getTime();
       const elapsedMin = Math.round(elapsedMs / (1000 * 60));
       remainingTimeForCurrent = Math.max(0, averageServiceTime - elapsedMin);
     }

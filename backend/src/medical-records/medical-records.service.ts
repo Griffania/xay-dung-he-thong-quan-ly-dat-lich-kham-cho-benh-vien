@@ -1,4 +1,10 @@
-import { Injectable, NotFoundException, BadRequestException, ForbiddenException, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+  ConflictException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { QueuesService } from '../queues/queues.service';
 import { CreateMedicalRecordDto } from './dto/create-medical-record.dto';
@@ -15,7 +21,7 @@ export class MedicalRecordsService {
   ) {}
 
   // Tạo mới hồ sơ bệnh án cho một lịch hẹn khám
-   
+
   async create(createDto: CreateMedicalRecordDto, currentUser: any) {
     const appointment = await this.prisma.appointment.findUnique({
       where: { id: createDto.appointmentId },
@@ -34,10 +40,14 @@ export class MedicalRecordsService {
         where: { userId: currentUser.userId },
       });
       if (!doctor || appointment.doctorId !== doctor.id) {
-        throw new ForbiddenException('Bạn không có quyền lập hồ sơ bệnh án cho cuộc hẹn của bác sĩ khác');
+        throw new ForbiddenException(
+          'Bạn không có quyền lập hồ sơ bệnh án cho cuộc hẹn của bác sĩ khác',
+        );
       }
     } else if (currentUser.role !== Role.ADMIN) {
-      throw new ForbiddenException('Chỉ Bác sĩ hoặc Quản trị viên mới được phép lập hồ sơ bệnh án');
+      throw new ForbiddenException(
+        'Chỉ Bác sĩ hoặc Quản trị viên mới được phép lập hồ sơ bệnh án',
+      );
     }
 
     // Kiểm tra xem bệnh án đã tồn tại chưa
@@ -72,7 +82,9 @@ export class MedicalRecordsService {
           treatment: createDto.treatment,
           prescription: createDto.prescription || null,
           notes: createDto.notes || null,
-          followUpDate: createDto.followUpDate ? new Date(createDto.followUpDate) : null,
+          followUpDate: createDto.followUpDate
+            ? new Date(createDto.followUpDate)
+            : null,
         },
       });
 
@@ -122,8 +134,12 @@ export class MedicalRecordsService {
   }
 
   //  Chỉnh sửa thông tin hồ sơ bệnh án đã lập
-   
-  async update(id: string, updateDto: UpdateMedicalRecordDto, currentUser: any) {
+
+  async update(
+    id: string,
+    updateDto: UpdateMedicalRecordDto,
+    currentUser: any,
+  ) {
     const medicalRecord = await this.prisma.medicalRecord.findUnique({
       where: { id },
     });
@@ -138,10 +154,14 @@ export class MedicalRecordsService {
         where: { userId: currentUser.userId },
       });
       if (!doctor || medicalRecord.doctorId !== doctor.id) {
-        throw new ForbiddenException('Bạn không có quyền chỉnh sửa hồ sơ bệnh án của bác sĩ khác');
+        throw new ForbiddenException(
+          'Bạn không có quyền chỉnh sửa hồ sơ bệnh án của bác sĩ khác',
+        );
       }
     } else if (currentUser.role !== Role.ADMIN) {
-      throw new ForbiddenException('Chỉ Bác sĩ phụ trách hoặc Quản trị viên mới được phép chỉnh sửa hồ sơ bệnh án');
+      throw new ForbiddenException(
+        'Chỉ Bác sĩ phụ trách hoặc Quản trị viên mới được phép chỉnh sửa hồ sơ bệnh án',
+      );
     }
 
     const updatedRecord = await this.prisma.medicalRecord.update({
@@ -151,7 +171,9 @@ export class MedicalRecordsService {
         treatment: updateDto.treatment,
         prescription: updateDto.prescription,
         notes: updateDto.notes,
-        followUpDate: updateDto.followUpDate ? new Date(updateDto.followUpDate) : undefined,
+        followUpDate: updateDto.followUpDate
+          ? new Date(updateDto.followUpDate)
+          : undefined,
       },
     });
 
@@ -162,13 +184,19 @@ export class MedicalRecordsService {
   }
 
   //Xem lại toàn bộ bệnh án cũ của một bệnh nhân
-   
-  async getPatientHistory(patientId: string, currentUser: any, query: QueryMedicalRecordDto) {
+
+  async getPatientHistory(
+    patientId: string,
+    currentUser: any,
+    query: QueryMedicalRecordDto,
+  ) {
     //  Kiểm tra phân quyền:
     // - PATIENT chỉ được xem bệnh án của chính mình
     // - ADMIN, DOCTOR, RECEPTIONIST được xem lịch sử bệnh án của bất kỳ ai
     if (currentUser.role === Role.PATIENT && currentUser.userId !== patientId) {
-      throw new ForbiddenException('Bạn không có quyền xem lịch sử bệnh án của bệnh nhân khác');
+      throw new ForbiddenException(
+        'Bạn không có quyền xem lịch sử bệnh án của bệnh nhân khác',
+      );
     }
 
     const page = parseInt(query.page || '1', 10);

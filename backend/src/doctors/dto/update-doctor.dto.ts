@@ -6,7 +6,6 @@ import {
   IsNotEmpty,
 } from 'class-validator';
 
-
 export class UpdateDoctorDto {
   // --- Thông tin tài khoản người dùng có thể cập nhật ---
   @IsString({ message: 'Họ và tên phải là chuỗi ký tự!' })

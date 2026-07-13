@@ -21,7 +21,7 @@ describe('Concurrency Control - Double Booking & Slot Locking (e2e)', () => {
   // Dữ liệu seeding để test
   let patientRoleId: string;
   let doctorRoleId: string;
-  
+
   let patientId: string;
   let patientToken: string;
 
@@ -65,13 +65,19 @@ describe('Concurrency Control - Double Booking & Slot Locking (e2e)', () => {
     await app.init();
 
     // 1. Lấy Role ID cho PATIENT và DOCTOR
-    const patientRole = await prisma.role.findUnique({ where: { code: Role.PATIENT } });
-    const doctorRole = await prisma.role.findUnique({ where: { code: Role.DOCTOR } });
-    
+    const patientRole = await prisma.role.findUnique({
+      where: { code: Role.PATIENT },
+    });
+    const doctorRole = await prisma.role.findUnique({
+      where: { code: Role.DOCTOR },
+    });
+
     if (!patientRole || !doctorRole) {
-      throw new Error('Không tìm thấy Role PATIENT hoặc DOCTOR trong DB. Vui lòng seed trước.');
+      throw new Error(
+        'Không tìm thấy Role PATIENT hoặc DOCTOR trong DB. Vui lòng seed trước.',
+      );
     }
-    
+
     patientRoleId = patientRole.id;
     doctorRoleId = doctorRole.id;
 
@@ -141,8 +147,14 @@ describe('Concurrency Control - Double Booking & Slot Locking (e2e)', () => {
     patientId2 = patientUser2.id;
 
     // Ký phát token cho 2 bệnh nhân để gọi API (đồng bộ payload và key name với auth service và jwt strategy)
-    patientToken = jwtService.sign({ sub: patientId, email: patientUser1.email, role: Role.PATIENT }, { secret: jwtSecret, expiresIn: '15m' });
-    patientToken2 = jwtService.sign({ sub: patientId2, email: patientUser2.email, role: Role.PATIENT }, { secret: jwtSecret, expiresIn: '15m' });
+    patientToken = jwtService.sign(
+      { sub: patientId, email: patientUser1.email, role: Role.PATIENT },
+      { secret: jwtSecret, expiresIn: '15m' },
+    );
+    patientToken2 = jwtService.sign(
+      { sub: patientId2, email: patientUser2.email, role: Role.PATIENT },
+      { secret: jwtSecret, expiresIn: '15m' },
+    );
 
     // 5. Seed ca làm việc (WorkSchedule) và Slot khám trống
     // Chọn ngày hôm sau để tránh lỗi slot in past
@@ -223,7 +235,10 @@ describe('Concurrency Control - Double Booking & Slot Locking (e2e)', () => {
         where: { name: 'Khoa Ngoại Thần Kinh Test Concurrency' },
       });
     } catch (e) {
-      console.warn('Lỗi dọn dẹp dữ liệu test (bỏ qua nếu bảng chưa có dữ liệu):', e.message);
+      console.warn(
+        'Lỗi dọn dẹp dữ liệu test (bỏ qua nếu bảng chưa có dữ liệu):',
+        e.message,
+      );
     }
   }
 
@@ -236,7 +251,7 @@ describe('Concurrency Control - Double Booking & Slot Locking (e2e)', () => {
       for (let i = 0; i < concurrentRequests; i++) {
         // Luân phiên dùng token của bệnh nhân 1 và bệnh nhân 2
         const token = i % 2 === 0 ? patientToken : patientToken2;
-        
+
         requestPromises.push(
           request(app.getHttpServer())
             .post('/api/appointments')
@@ -245,17 +260,20 @@ describe('Concurrency Control - Double Booking & Slot Locking (e2e)', () => {
               slotId: slotId,
               symptoms: `Mô phỏng đặt lịch đồng thời ca thứ ${i}`,
               notes: 'Concurrency E2E test',
-            })
+            }),
         );
       }
 
       // Đợi tất cả hoàn thành
       const responses = await Promise.all(requestPromises);
 
-
       // Phân loại kết quả phản hồi
-      const successResponses = responses.filter(r => r.status === HttpStatus.CREATED);
-      const conflictResponses = responses.filter(r => r.status === HttpStatus.CONFLICT);
+      const successResponses = responses.filter(
+        (r) => r.status === HttpStatus.CREATED,
+      );
+      const conflictResponses = responses.filter(
+        (r) => r.status === HttpStatus.CONFLICT,
+      );
 
       // Verify kiểm soát đặt lịch
       expect(successResponses.length).toBe(1);
@@ -268,11 +286,12 @@ describe('Concurrency Control - Double Booking & Slot Locking (e2e)', () => {
       expect(successBody.data.status).toBe(AppointmentStatus.PENDING);
 
       // Kiểm tra các phản hồi bị từ chối
-      conflictResponses.forEach(response => {
+      conflictResponses.forEach((response) => {
         expect(response.body.statusCode).toBe(HttpStatus.CONFLICT);
         expect(
-          response.body.message.includes('khung giờ khám này đã được đặt trước') ||
-          response.body.message.includes('đang được xử lý')
+          response.body.message.includes(
+            'khung giờ khám này đã được đặt trước',
+          ) || response.body.message.includes('đang được xử lý'),
         ).toBe(true);
       });
 
@@ -297,12 +316,13 @@ describe('Concurrency Control - Double Booking & Slot Locking (e2e)', () => {
       expect(activeAppt).toBeDefined();
 
       // 2. Tiến hành Hủy cuộc hẹn này
-      const tokenToCancel = activeAppt!.patientId === patientId ? patientToken : patientToken2;
+      const tokenToCancel =
+        activeAppt!.patientId === patientId ? patientToken : patientToken2;
       const cancelResponse = await request(app.getHttpServer())
         .patch(`/api/appointments/${activeAppt!.id}/cancel`)
         .set('Authorization', `Bearer ${tokenToCancel}`)
         .expect(HttpStatus.OK);
-      
+
       expect(cancelResponse.body.message).toBe('hủy lịch hẹn thành công');
       expect(cancelResponse.body.data.status).toBe(AppointmentStatus.CANCELLED);
 
@@ -331,10 +351,14 @@ describe('Concurrency Control - Double Booking & Slot Locking (e2e)', () => {
         where: { slotId: slotId },
       });
       expect(allApptsForSlot.length).toBe(2);
-      
-      const cancelledAppt = allApptsForSlot.find(a => a.status === AppointmentStatus.CANCELLED);
-      const pendingAppt = allApptsForSlot.find(a => a.status === AppointmentStatus.PENDING);
-      
+
+      const cancelledAppt = allApptsForSlot.find(
+        (a) => a.status === AppointmentStatus.CANCELLED,
+      );
+      const pendingAppt = allApptsForSlot.find(
+        (a) => a.status === AppointmentStatus.PENDING,
+      );
+
       expect(cancelledAppt).toBeDefined();
       expect(pendingAppt).toBeDefined();
       expect(pendingAppt?.patientId).toBe(patientId2);

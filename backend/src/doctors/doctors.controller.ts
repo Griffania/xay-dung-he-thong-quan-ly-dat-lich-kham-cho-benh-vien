@@ -56,20 +56,17 @@ export class DoctorsController {
     return this.doctorsService.getTodayAppointments(req.user, date);
   }
 
-
   @Get('me/queue')
   @Roles(Role.DOCTOR)
   getDoctorQueue(@Req() req: any, @Query('date') date?: string) {
     return this.doctorsService.getDoctorQueue(req.user, date);
   }
 
- 
   @Get('patients/:id')
   @Roles(Role.DOCTOR, Role.RECEPTIONIST, Role.ADMIN)
   getPatientDetail(@Param('id') id: string) {
     return this.doctorsService.getPatientDetail(id);
   }
-
 
   @Get(':id')
   findOne(@Param('id') id: string) {
@@ -105,25 +102,24 @@ export class DoctorsController {
   enable(@Param('id') id: string) {
     return this.doctorsService.enable(id);
   }
- 
+
   @Get(':id/chedules')
   getDoctorSchedules(
     @Param('id') id: string,
     @Req() req: any,
-    @Query('workDate') workDate?:string,
-    @Query('page') page?:string,
-    @Query('limit') limit?:string,
-  ){
-    return this.doctorsService.findDoctorSchedules(id,req.user,{
-        workDate,page,limit,
+    @Query('workDate') workDate?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.doctorsService.findDoctorSchedules(id, req.user, {
+      workDate,
+      page,
+      limit,
     });
   }
 
   @Get(':id/slots/available')
-  getAvailableSlots(
-    @Param('id') id:string,
-    @Query('date')date:string,
-  ){
-    return  this.doctorsService.findAvailableSlots(id,date);
+  getAvailableSlots(@Param('id') id: string, @Query('date') date: string) {
+    return this.doctorsService.findAvailableSlots(id, date);
   }
 }

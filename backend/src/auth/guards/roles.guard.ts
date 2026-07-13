@@ -28,8 +28,8 @@ export class RolesGuard implements CanActivate {
     // Lấy danh sách các role được chỉ định từ decorator @Roles
     // Tìm kiếm ở cả mức method (getHandler) và mức class (getClass)
     const requiredRoles = this.reflector.getAllAndOverride<Role[]>(ROLES_KEY, [
-      context.getHandler(),//lấy method hiện tại
-      context.getClass(),//lấy controller hiện tại
+      context.getHandler(), //lấy method hiện tại
+      context.getClass(), //lấy controller hiện tại
     ]);
     // Nếu route không yêu cầu bất kỳ role nào, cho phép truy cập qua
     if (!requiredRoles || requiredRoles.length === 0) {

@@ -53,10 +53,7 @@ export class UsersService {
       user: this.sanitizeUser(user),
     };
   }
-  async findAll(query: {
-    search?: string;
-    role?: Role;
-  }) {
+  async findAll(query: { search?: string; role?: Role }) {
     const where: any = {};
     if (query.search) {
       where.OR = [

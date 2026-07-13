@@ -49,7 +49,6 @@ export class DoctorsService {
       bio,
     } = createDoctorDto;
 
-    // 1. Kiểm tra email trùng lặp trên bảng users
     const existingUser = await this.prisma.user.findUnique({
       where: { email },
     });
@@ -57,7 +56,6 @@ export class DoctorsService {
       throw new ConflictException('Email này đã được sử dụng trên hệ thống!');
     }
 
-    // 2. Kiểm tra sự tồn tại của chuyên khoa
     const specialty = await this.prisma.specialty.findUnique({
       where: { id: specialtyId },
     });
@@ -65,12 +63,10 @@ export class DoctorsService {
       throw new NotFoundException('Không tìm thấy chuyên khoa được chỉ định!');
     }
 
-    // 3. Mã hóa mật khẩu đăng nhập của bác sĩ
     const passwordHash = await this.hashPassword(password);
 
-    // 4. Khởi chạy transaction tạo tài khoản User và hồ sơ Doctor liên kết
     const result = await this.prisma.$transaction(async (tx) => {
-      // 4a. Tạo User mới
+      // Tạo User mới
       const user = await tx.user.create({
         data: {
           email,
@@ -83,21 +79,21 @@ export class DoctorsService {
         },
       });
 
-      // 4b. Tạo hồ sơ chuyên môn Bác sĩ
+      //Tạo hồ sơ chuyên môn Bác sĩ
       const doctor = await tx.doctor.create({
         data: {
           userId: user.id,
           specialtyId,
           licenseNo,
           bio,
-          isActive: true, // Mặc định hoạt động
+          isActive: true,
         },
       });
 
       return { user, doctor };
     });
 
-    // 5. Trả về kết quả sau khi loại bỏ mật khẩu băm
+    //Trả về kết quả sau khi loại bỏ mật khẩu băm
     return {
       message: 'Tạo tài khoản bác sĩ thành công',
       data: {
@@ -404,93 +400,97 @@ export class DoctorsService {
   async findDoctorSchedules(
     doctorId: string,
     user: any,
-    query: {workDate?:string;page?:string;limit?:string},
-  ){
+    query: { workDate?: string; limit?: string; page?: string },
+  ) {
     const doctor = await this.prisma.doctor.findUnique({
-      where : {id:doctorId},
+      where: { id: doctorId },
     });
-    if(!doctor){
+    if (!doctor) {
       throw new NotFoundException('Không tìm thấy hồ sơ bác sĩ yêu cầu!');
     }
-    const page = parseInt(query.page||'1',10);
-    const limit = parseInt(query.limit||'10',10);
-    const skip = (page-1)*limit;
-    const where:any = {doctorId};
+    const limit = parseInt(query.limit || '10', 10);
+    const page = parseInt(query.page || '1', 10);
+    const skip = (page - 1) * limit;
+    const where: any = { doctorId };
     //bệnh nhân lọc lịch làm việc của bác sĩ theo ngày
-    if(query.workDate){
+    if (query.workDate) {
       const parsedDate = new Date(`${query.workDate}T00:00:00.000Z`);
-      if(isNaN(parsedDate.getTime())){
+      if (isNaN(parsedDate.getTime())) {
         throw new BadRequestException('ngày lọc không đún dạng yyyy-mm-dd!');
       }
-      where.workDate=parsedDate;
+      where.workDate = parsedDate;
     }
-    //truy vấn lịch làm việc kèm theo các slot khám chi tiết của lịch trình đó 
-    const [schedules,total]=await Promise.all([
+    //truy vấn lịch làm việc kèm theo các slot khám chi tiết của lịch trình đó
+    const [schedules, total] = await Promise.all([
       this.prisma.workSchedule.findMany({
         where,
-        include:{
-          slots:{
-            orderBy:{startTime:'asc'}//sắp xếp thời gian bắt đầu của các slot tăng dần
+        include: {
+          slots: {
+            orderBy: { startTime: 'asc' }, //sắp xếp thời gian bắt đầu của các slot tăng dần
           },
         },
         skip,
-        take:limit,
-        orderBy:[{workDate:'desc'},{startTime:'asc'}]//sắp xếp ngày làm việc mới nhất lên trên đầu trang
+        take: limit,
+        orderBy: [{ workDate: 'desc' }, { startTime: 'asc' }], //sắp xếp ngày làm việc mới nhất lên trên đầu trang
       }),
-      this.prisma.workSchedule.count({where}),
+      this.prisma.workSchedule.count({ where }),
     ]);
     return {
-      data:schedules,
-      meta:{
+      data: schedules,
+      meta: {
         total,
         page,
         limit,
-        totalPages:Math.ceil(total/limit),
+        totalPages: Math.ceil(total / limit),
       },
-    };  
+    };
   }
-//  Lấy danh sách các khung giờ khám còn trống (AVAILABLE) của bác sĩ theo ngày cụ thể
+  //  Lấy danh sách các khung giờ khám còn trống (AVAILABLE) của bác sĩ theo ngày cụ thể
 
-  async findAvailableSlots(doctorId:string,dateStr:string){
+  async findAvailableSlots(doctorId: string, dateStr: string) {
     const doctor = await this.prisma.doctor.findUnique({
-      where : {id:doctorId},
+      where: { id: doctorId },
     });
-    if(!doctor){
+    if (!doctor) {
       throw new NotFoundException('không tìm thấy hồ sơ bác sĩ yêu cầu!');
     }
     //ép kiểu dạng chuổi sang Date trong múi giờ UTC
     const parsedDate = new Date(`${dateStr}T00:00:00.000Z`);
-    if(isNaN(parsedDate.getTime())){
+    if (isNaN(parsedDate.getTime())) {
       throw new BadRequestException('ngày truy vấn không hợp lệ');
     }
-    const whereClause:any={
+    const whereClause: any = {
       doctorId,
       date: parsedDate,
-      status:SlotStatus.AVAILABLE//chỉ lấy khung giờ còn trống
+      status: SlotStatus.AVAILABLE, //chỉ lấy khung giờ còn trống
     };
-    //nếu slot chọn là ngày hôm nay , chỉ lấy các slot có giờ bắt đầu lớn hơn hiện tại
-    const todayStr = new Date().toISOString().split('T')[0];
-    if(dateStr===todayStr){
-      const now = new Date();
-      const hours  = String(now.getUTCHours()).padStart(2,'0');
-      const minuted = String(now.getUTCMinutes()).padStart(2,'0');
-      const seconds = String(now.getMilliseconds()).padStart(2,'0');
+    //nếu slot chọn là ngày hôm nay , chỉ lấy các slot có giờ bắt đầu lớn hơn hiện tại (local)
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const todayStr = `${year}-${month}-${day}`;
+
+    if (dateStr === todayStr) {
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      const seconds = String(now.getSeconds()).padStart(2, '0');
       //so sánh theo giờ trong ngày 1970-01-01 UTC của prisma
       const currentTimeOFDay = new Date(
-        `1970-01-01T${hours}:${minuted}:${seconds}.000Z`,
+        `1970-01-01T${hours}:${minutes}:${seconds}.000Z`,
       );
       whereClause.startTime = {
         gt: currentTimeOFDay, //lớn hơn giờ hiện tại
-      }
+      };
     }
     //lấy danh sách slot và sấp xếp theo thời gian bắt đầu tăng dần
     return this.prisma.slot.findMany({
-      where:whereClause,
-      orderBy:{startTime:'asc'}
+      where: whereClause,
+      orderBy: { startTime: 'asc' },
     });
   }
 
-//  Lấy danh sách tất cả lịch hẹn được phân cho bác sĩ đăng nhập hôm nay (hoặc ngày cụ thể)
+  //  Lấy danh sách tất cả lịch hẹn được phân cho bác sĩ đăng nhập hôm nay (hoặc ngày cụ thể)
 
   async getTodayAppointments(currentUser: any, dateStr?: string) {
     const doctor = await this.prisma.doctor.findUnique({
@@ -511,7 +511,9 @@ export class DoctorsService {
 
     const parsedDate = new Date(`${targetDateStr}T00:00:00.000Z`);
     if (isNaN(parsedDate.getTime())) {
-      throw new BadRequestException('Ngày truy vấn không đúng định dạng YYYY-MM-DD');
+      throw new BadRequestException(
+        'Ngày truy vấn không đúng định dạng YYYY-MM-DD',
+      );
     }
 
     const appointments = await this.prisma.appointment.findMany({
@@ -567,8 +569,8 @@ export class DoctorsService {
     return appointments;
   }
 
-//  Xem hồ sơ chi tiết của bệnh nhân (bao gồm thông tin cá nhân và lịch sử khám bệnh)
-   
+  //  Xem hồ sơ chi tiết của bệnh nhân (bao gồm thông tin cá nhân và lịch sử khám bệnh)
+
   async getPatientDetail(patientId: string) {
     const patient = await this.prisma.user.findUnique({
       where: { id: patientId },
@@ -691,7 +693,7 @@ export class DoctorsService {
   }
 
   //  Xem danh sách hàng đợi riêng của bác sĩ đăng nhập hôm nay
-   
+
   async getDoctorQueue(currentUser: any, dateStr?: string) {
     const doctor = await this.prisma.doctor.findUnique({
       where: { userId: currentUser.userId },

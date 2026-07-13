@@ -1,4 +1,10 @@
-import { IsNotEmpty, IsOptional, IsString, IsDateString, IsUUID } from "class-validator";
+import {
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsDateString,
+  IsUUID,
+} from 'class-validator';
 
 export class CreateMedicalRecordDto {
   @IsUUID('4', { message: 'ID cuộc hẹn phải là định dạng UUID hợp lệ' })

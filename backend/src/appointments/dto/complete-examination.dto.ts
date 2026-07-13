@@ -1,4 +1,9 @@
-import { IsNotEmpty, IsOptional, IsString, IsDateString } from "class-validator";
+import {
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsDateString,
+} from 'class-validator';
 
 export class CompleteExaminationDto {
   @IsString({ message: 'Chẩn đoán phải là chuỗi văn bản' })
