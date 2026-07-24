@@ -1,23 +1,20 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { ShieldAlert, 
-  Server, 
-  Database, 
-  Users, 
-  HardDrive, 
+import { 
   RefreshCw,
   Search,
-  CheckCircle,
-  AlertCircle,
   Lock,
   Unlock,
   UserPlus,
-  Settings,
-  Mail,
-  User
+  Edit2,
+  Trash2,
+  CheckCircle,
+  AlertCircle
 } from 'lucide-react';
 import api from '../../../lib/api';
+import { formatDate } from '../../../lib/utils/datetime';
+import './admin-custom.css';
 
 interface UserItem {
   id: string;
@@ -35,11 +32,26 @@ interface UserItem {
 
 
 export default function AdminDashboard() {
-  // Tabs & Views
-  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'settings'>('overview');
-
   // Trạng thái Users
   const [usersList, setUsersList] = useState<UserItem[]>([]);
+
+  // State Chỉnh sửa User
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingUser, setEditingUser] = useState<UserItem | null>(null);
+  const [editFullName, setEditFullName] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [editBirthDate, setEditBirthDate] = useState('');
+  const [isSavingUser, setIsSavingUser] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [editSuccess, setEditSuccess] = useState<string | null>(null);
+
+  // State Xóa User
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deletingUser, setDeletingUser] = useState<UserItem | null>(null);
+  const [isDeletingUser, setIsDeletingUser] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleteSuccess, setDeleteSuccess] = useState<string | null>(null);
   const [userSearch, setUserSearch] = useState('');
   const [userRoleFilter, setUserRoleFilter] = useState('');
   const [userLimit] = useState(100);
@@ -53,30 +65,12 @@ export default function AdminDashboard() {
   const [createFullName, setCreateFullName] = useState('');
   const [createPhone, setCreatePhone] = useState('');
   const [createBirthDate, setCreateBirthDate] = useState('');
-  const [createRole, setCreateRole] = useState('RECEPTIONIST');
+  const [createRole, setCreateRole] = useState('PATIENT');
   const [isCreatingUser, setIsCreatingUser] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [createSuccess, setCreateSuccess] = useState<string | null>(null);
 
-  // Đọc hash từ URL để đổi Tab tương ứng với sidebar menu
-  useEffect(() => {
-    const handleHashChange = () => {
-      const hash = window.location.hash;
-      if (hash === '#users') {
-        setActiveTab('users');
-      } else if (hash === '#settings') {
-        setActiveTab('settings');
-      } else {
-        setActiveTab('overview');
-      }
-    };
-
-    handleHashChange(); // Run on mount
-    window.addEventListener('hashchange', handleHashChange);
-    return () => window.removeEventListener('hashchange', handleHashChange);
-  }, []);
-
-  // Lấy dữ liệu danh sách người dùng , sử lý tìm kiếm user
+  // Lấy dữ liệu danh sách người dùng, xử lý tìm kiếm user
   const fetchUsers = async () => {
     setIsUsersLoading(true);
     try {
@@ -105,10 +99,94 @@ export default function AdminDashboard() {
 
 
   useEffect(() => {
-    if (activeTab === 'users') {
-      fetchUsers();
+    fetchUsers();
+  }, [userSearch, userRoleFilter]);
+
+  // Bắt đầu chỉnh sửa User
+  const handleStartEditUser = (user: UserItem) => {
+    setEditingUser(user);
+    setEditFullName(user.fullName || '');
+    setEditEmail(user.email || '');
+    setEditPhone(user.phone || '');
+    if (user.birthDate) {
+      const dateObj = new Date(user.birthDate);
+      const year = dateObj.getFullYear();
+      const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+      const day = String(dateObj.getDate()).padStart(2, '0');
+      setEditBirthDate(`${year}-${month}-${day}`);
+    } else {
+      setEditBirthDate('');
     }
-  }, [activeTab, userSearch, userRoleFilter]);
+    setEditError(null);
+    setEditSuccess(null);
+    setShowEditModal(true);
+  };
+
+  // Gửi thông tin cập nhật User
+  const handleUpdateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUser) return;
+    setEditError(null);
+    setEditSuccess(null);
+    setIsSavingUser(true);
+
+    try {
+      await api.patch(`/users/${editingUser.id}`, {
+        fullName: editFullName,
+        email: editEmail,
+        phone: editPhone || null,
+        birthDate: editBirthDate ? new Date(editBirthDate).toISOString() : null,
+      });
+
+      setEditSuccess('Cập nhật thông tin người dùng thành công!');
+      fetchUsers();
+
+      setTimeout(() => {
+        setShowEditModal(false);
+        setEditingUser(null);
+        setEditSuccess(null);
+      }, 1500);
+    } catch (err: any) {
+      const message = err.response?.data?.message || 'Có lỗi xảy ra khi cập nhật thông tin!';
+      setEditError(Array.isArray(message) ? message[0] : message);
+    } finally {
+      setIsSavingUser(false);
+    }
+  };
+
+  // Bắt đầu xóa User
+  const handleStartDeleteUser = (user: UserItem) => {
+    setDeletingUser(user);
+    setDeleteError(null);
+    setDeleteSuccess(null);
+    setShowDeleteModal(true);
+  };
+
+  // Gửi yêu cầu xóa User
+  const handleDeleteUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!deletingUser) return;
+    setDeleteError(null);
+    setDeleteSuccess(null);
+    setIsDeletingUser(true);
+
+    try {
+      await api.delete(`/users/${deletingUser.id}`);
+      setDeleteSuccess('Xóa tài khoản thành công!');
+      fetchUsers();
+
+      setTimeout(() => {
+        setShowDeleteModal(false);
+        setDeletingUser(null);
+        setDeleteSuccess(null);
+      }, 1500);
+    } catch (err: any) {
+      const message = err.response?.data?.message || 'Có lỗi xảy ra khi xóa tài khoản!';
+      setDeleteError(Array.isArray(message) ? message[0] : message);
+    } finally {
+      setIsDeletingUser(false);
+    }
+  };
 
   // Khóa tài khoản
   const handleLockUser = async (id: string) => {
@@ -147,14 +225,14 @@ export default function AdminDashboard() {
         role: createRole
       });
 
-      setCreateSuccess('Tạo tài khoản nhân viên mới thành công!');
+      setCreateSuccess('Tạo tài khoản người dùng mới thành công!');
       setCreateEmail('');
       setCreatePassword('');
       setCreateFullName('');
       setCreatePhone('');
       setCreateBirthDate('');
       
-      // Reload danh sách & stats
+      // Reload danh sách
       fetchUsers();
 
       setTimeout(() => {
@@ -168,7 +246,6 @@ export default function AdminDashboard() {
       setIsCreatingUser(false);
     }
   };
-
   return (
     <div className="flex flex-col gap-6">
       {/* Header */}
@@ -179,29 +256,16 @@ export default function AdminDashboard() {
           </h1>
         </div>
         
-        {activeTab === 'users' && (
-          <button 
-            onClick={() => setShowCreateModal(true)}
-            className="btn btn-primary"
-          >
-            <UserPlus style={{ width: '1rem', height: '1rem' }} />
-            Tạo tài khoản nhân viên
-          </button>
-        )}
-      </div>
-
-      {/* Tabs */}
-      <div className="tabs-nav">
         <button 
-          onClick={() => { setActiveTab('users'); window.location.hash = '#users'; }}
-          className={`tab-btn ${activeTab === 'users' ? 'tab-btn-active' : ''}`}
+          onClick={() => setShowCreateModal(true)}
+          className="btn btn-primary"
         >
-          Quản lý tài khoản
+          <UserPlus style={{ width: '1rem', height: '1rem' }} />
+          Tạo tài khoản người dùng
         </button>
       </div>
 
-      {activeTab === 'users' && (
-        <div className="panel-card">
+      <div className="panel-card">
           {/* Controls bar */}
           <div className="controls-bar">
             {/* Search */}
@@ -301,25 +365,43 @@ export default function AdminDashboard() {
                           </span>
                         </td>
                         <td className="text-right">
-                          {user.role?.code !== 'ADMIN' && (
-                            user.status === 'ACTIVE' ? (
-                              <button 
-                                onClick={() => handleLockUser(user.id)}
-                                className="btn btn-secondary"
-                                style={{ color: 'var(--color-danger)', borderColor: 'var(--color-danger)', padding: '0.375rem 0.75rem', fontSize: '0.75rem' }}
-                              >
-                                <Lock style={{ width: '0.75rem', height: '0.75rem' }} /> Lock
-                              </button>
-                            ) : (
-                              <button 
-                                onClick={() => handleUnlockUser(user.id)}
-                                className="btn btn-secondary"
-                                style={{ color: 'var(--color-success)', borderColor: 'var(--color-success)', padding: '0.375rem 0.75rem', fontSize: '0.75rem' }}
-                              >
-                                <Unlock style={{ width: '0.75rem', height: '0.75rem' }} /> Unlock
-                              </button>
-                            )
-                          )}
+                          <div className="flex gap-2 justify-end" style={{ flexWrap: 'wrap' }}>
+                            <button
+                              onClick={() => handleStartEditUser(user)}
+                              className="btn btn-secondary"
+                              style={{ padding: '0.375rem 0.75rem', fontSize: '0.75rem' }}
+                            >
+                              <Edit2 style={{ width: '0.75rem', height: '0.75rem' }} /> Sửa
+                            </button>
+                            {user.role?.code !== 'ADMIN' && (
+                              <>
+                                {user.status === 'ACTIVE' ? (
+                                  <button 
+                                    onClick={() => handleLockUser(user.id)}
+                                    className="btn btn-secondary"
+                                    style={{ color: 'var(--color-danger)', borderColor: 'var(--color-danger)', padding: '0.375rem 0.75rem', fontSize: '0.75rem' }}
+                                  >
+                                    <Lock style={{ width: '0.75rem', height: '0.75rem' }} /> Khóa
+                                  </button>
+                                ) : (
+                                  <button 
+                                    onClick={() => handleUnlockUser(user.id)}
+                                    className="btn btn-secondary"
+                                    style={{ color: 'var(--color-success)', borderColor: 'var(--color-success)', padding: '0.375rem 0.75rem', fontSize: '0.75rem' }}
+                                  >
+                                    <Unlock style={{ width: '0.75rem', height: '0.75rem' }} /> Mở khóa
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => handleStartDeleteUser(user)}
+                                  className="btn btn-secondary"
+                                  style={{ color: 'var(--color-danger)', borderColor: 'var(--color-danger)', padding: '0.375rem 0.75rem', fontSize: '0.75rem' }}
+                                >
+                                  <Trash2 style={{ width: '0.75rem', height: '0.75rem' }} /> Xóa
+                                </button>
+                              </>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -329,7 +411,6 @@ export default function AdminDashboard() {
             )}
           </div>
         </div>
-      )}
       {/* CREATE STAFF MODAL */}
       {showCreateModal && (
         <div className="modal-backdrop">
@@ -338,7 +419,7 @@ export default function AdminDashboard() {
 
             <h3 className="modal-title mb-4">
               <UserPlus style={{ width: '1.25rem', height: '1.25rem', color: 'var(--color-primary)' }} />
-              Tạo tài khoản nhân viên mới
+              Tạo tài khoản người dùng mới
             </h3>
 
             {createSuccess && (
@@ -378,7 +459,7 @@ export default function AdminDashboard() {
                   required
                   value={createEmail} 
                   onChange={(e) => setCreateEmail(e.target.value)} 
-                  placeholder="...@gmail.com" 
+                  placeholder="...@clinic.com" 
                   className="input-control"
                   style={{ paddingLeft: '1rem' }}
                 />
@@ -416,26 +497,31 @@ export default function AdminDashboard() {
                 <label className="form-label">Ngày sinh</label>
                 <input 
                   type="date" 
+                  data-date={createBirthDate ? formatDate(createBirthDate) : 'dd/mm/yyyy'}
                   value={createBirthDate} 
                   onChange={(e) => setCreateBirthDate(e.target.value)} 
                   className="input-control"
                   style={{ paddingLeft: '1rem' }}
                 />
+                {createBirthDate && (
+                  <p style={{ fontSize: '11px', color: 'var(--color-primary)', marginTop: '0.25rem', fontWeight: 600 }}>
+                    Ngày sinh đã chọn: {formatDate(createBirthDate)}
+                  </p>
+                )}
               </div>
 
-              {/* Role select */}
+              {/* Role display (Patients only) */}
               <div className="form-group" style={{ marginBottom: 0 }}>
                 <label className="form-label">Vai trò cấp phát</label>
-                <select
-                  value={createRole}
-                  onChange={(e) => setCreateRole(e.target.value)}
-                  className="select-control w-full"
-                >
-                  <option value="RECEPTIONIST">Lễ tân (Receptionist)</option>
-                  <option value="ADMIN">Quản trị viên (Admin)</option>
-                </select>
+                <input 
+                  type="text" 
+                  readOnly 
+                  value="Bệnh nhân (Patient)" 
+                  className="input-control" 
+                  style={{ paddingLeft: '1rem', backgroundColor: '#f1f5f9', cursor: 'not-allowed' }} 
+                />
                 <span style={{ fontSize: '10px', color: 'var(--color-warning)', fontWeight: 500, marginTop: '0.25rem' }}>
-                  Lưu ý: Để tạo bác sĩ mới, vui lòng vào trang Quản lý Bác sĩ riêng.
+                  Lưu ý: Tài khoản tạo ở mục này sẽ có vai trò Bệnh nhân. Để tạo tài khoản nhân sự (Lễ tân, Bác sĩ, Admin), vui lòng thực hiện ở mục Quản lý Nhân sự.
                 </span>
               </div>
 
@@ -454,6 +540,167 @@ export default function AdminDashboard() {
                   className="btn btn-primary flex-1"
                 >
                   {isCreatingUser ? 'Đang tạo...' : 'Xác nhận tạo'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT USER MODAL */}
+      {showEditModal && editingUser && (
+        <div className="modal-backdrop">
+          <div className="modal-content p-6">
+            <div className="accent-bar"></div>
+
+            <h3 className="modal-title mb-4">
+              <Edit2 style={{ width: '1.25rem', height: '1.25rem', color: 'var(--color-primary)' }} />
+              Chỉnh sửa thông tin người dùng
+            </h3>
+
+            {editSuccess && (
+              <div className="alert alert-success" style={{ padding: '0.75rem', fontSize: '0.75rem', marginBottom: '1rem' }}>
+                <CheckCircle style={{ width: '1rem', height: '1rem', marginTop: '2px' }} />
+                <span>{editSuccess}</span>
+              </div>
+            )}
+
+            {editError && (
+              <div className="alert alert-error" style={{ padding: '0.75rem', fontSize: '0.75rem', marginBottom: '1rem' }}>
+                <AlertCircle style={{ width: '1rem', height: '1rem', marginTop: '2px' }} />
+                <span>{editError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleUpdateUser} className="flex flex-col gap-4">
+              {/* FullName */}
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Họ và tên</label>
+                <input 
+                  type="text" 
+                  required
+                  value={editFullName} 
+                  onChange={(e) => setEditFullName(e.target.value)} 
+                  placeholder="Nguyễn Văn A" 
+                  className="input-control"
+                  style={{ paddingLeft: '1rem' }}
+                />
+              </div>
+
+              {/* Email */}
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Địa chỉ Email</label>
+                <input 
+                  type="email" 
+                  required
+                  value={editEmail} 
+                  onChange={(e) => setEditEmail(e.target.value)} 
+                  placeholder="name@example.com" 
+                  className="input-control"
+                  style={{ paddingLeft: '1rem' }}
+                />
+              </div>
+
+              {/* Phone */}
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Số điện thoại</label>
+                <input 
+                  type="tel" 
+                  value={editPhone} 
+                  onChange={(e) => setEditPhone(e.target.value)} 
+                  placeholder="0901234567" 
+                  className="input-control"
+                  style={{ paddingLeft: '1rem' }}
+                />
+              </div>
+
+              {/* Birth Date */}
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Ngày sinh</label>
+                <input 
+                  type="date" 
+                  data-date={editBirthDate ? formatDate(editBirthDate) : 'dd/mm/yyyy'}
+                  value={editBirthDate} 
+                  onChange={(e) => setEditBirthDate(e.target.value)} 
+                  className="input-control"
+                  style={{ paddingLeft: '1rem' }}
+                />
+                {editBirthDate && (
+                  <p style={{ fontSize: '11px', color: 'var(--color-primary)', marginTop: '0.25rem', fontWeight: 600 }}>
+                    Ngày sinh đã chọn: {formatDate(editBirthDate)}
+                  </p>
+                )}
+              </div>
+
+              {/* Actions */}
+              <div className="modal-footer pt-3" style={{ borderTop: '1px solid var(--border-light)' }}>
+                <button
+                  type="button"
+                  onClick={() => { setShowEditModal(false); setEditingUser(null); }}
+                  className="btn btn-secondary flex-1"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingUser}
+                  className="btn btn-primary flex-1"
+                >
+                  {isSavingUser ? 'Đang lưu...' : 'Lưu thay đổi'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* CONFIRM DELETE MODAL */}
+      {showDeleteModal && deletingUser && (
+        <div className="modal-backdrop">
+          <div className="modal-content p-6">
+            <div className="accent-bar" style={{ background: 'linear-gradient(90deg, var(--color-danger) 0%, #ef4444 100%)' }}></div>
+
+            <h3 className="modal-title mb-4" style={{ color: 'var(--color-danger)' }}>
+              <Trash2 style={{ width: '1.25rem', height: '1.25rem', color: 'var(--color-danger)' }} />
+              Xác nhận xóa tài khoản
+            </h3>
+
+            {deleteSuccess && (
+              <div className="alert alert-success" style={{ padding: '0.75rem', fontSize: '0.75rem', marginBottom: '1rem' }}>
+                <CheckCircle style={{ width: '1rem', height: '1rem', marginTop: '2px' }} />
+                <span>{deleteSuccess}</span>
+              </div>
+            )}
+
+            {deleteError && (
+              <div className="alert alert-error" style={{ padding: '0.75rem', fontSize: '0.75rem', marginBottom: '1rem' }}>
+                <AlertCircle style={{ width: '1rem', height: '1rem', marginTop: '2px' }} />
+                <span>{deleteError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleDeleteUser} className="flex flex-col gap-4">
+              <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', lineHeight: '1.5' }}>
+                Bạn có chắc chắn muốn xóa tài khoản <strong>{deletingUser.fullName}</strong> ({deletingUser.email})? 
+                <br />
+                <span className="text-danger" style={{ fontWeight: 600 }}>Cảnh báo:</span> Hành động này sẽ xóa vĩnh viễn tài khoản và các thông tin liên quan (lịch hẹn, bệnh án) và không thể hoàn tác!
+              </div>
+
+              {/* Actions */}
+              <div className="modal-footer pt-3" style={{ borderTop: '1px solid var(--border-light)' }}>
+                <button
+                  type="button"
+                  onClick={() => { setShowDeleteModal(false); setDeletingUser(null); }}
+                  className="btn btn-secondary flex-1"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="submit"
+                  disabled={isDeletingUser}
+                  className="btn btn-danger flex-1"
+                >
+                  {isDeletingUser ? 'Đang xóa...' : 'Xác nhận xóa'}
                 </button>
               </div>
             </form>

@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
 import { UserStatus } from '@prisma/client';
 import { Role } from '../auth/enums/role.enum';
 import * as bcrypt from 'bcrypt';
@@ -59,6 +60,7 @@ export class UsersService {
       where.OR = [
         { email: { contains: query.search, mode: 'insensitive' } },
         { fullName: { contains: query.search, mode: 'insensitive' } },
+        { phone: { contains: query.search, mode: 'insensitive' } },
       ];
     }
     if (query.role) {
@@ -128,6 +130,133 @@ export class UsersService {
     return {
       message: 'Mở khóa tài khoản thành công',
       user: this.sanitizeUser(updatedUser),
+    };
+  }
+
+  async update(id: string, updateUserDto: UpdateUserDto) {
+    const user = await this.prisma.user.findUnique({
+      where: { id },
+    });
+    if (!user) {
+      throw new NotFoundException('Không tìm thấy người dùng!');
+    }
+
+    const { email, fullName, phone, birthDate } = updateUserDto;
+
+    if (email && email !== user.email) {
+      const existingUser = await this.prisma.user.findUnique({
+        where: { email },
+      });
+      if (existingUser) {
+        throw new ConflictException('Email này đã được sử dụng!');
+      }
+    }
+
+    const updatedUser = await this.prisma.user.update({
+      where: { id },
+      data: {
+        ...(email && { email }),
+        ...(fullName && { fullName }),
+        ...(phone !== undefined && { phone }),
+        ...(birthDate !== undefined ? { birthDate: birthDate ? new Date(birthDate) : null } : {}),
+      },
+      include: { role: true },
+    });
+
+    return {
+      message: 'Cập nhật thông tin thành công',
+      user: this.sanitizeUser(updatedUser),
+    };
+  }
+
+  async remove(id: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id },
+      include: { doctorProfile: true },
+    });
+    if (!user) {
+      throw new NotFoundException('Không tìm thấy người dùng!');
+    }
+
+    const doctorProfileId = user.doctorProfile?.id;
+
+    await this.prisma.$transaction(async (tx) => {
+      // Tìm các cuộc hẹn liên quan cần xóa
+      const appointments = await tx.appointment.findMany({
+        where: {
+          OR: [
+            { patientId: id },
+            ...(doctorProfileId ? [{ doctorId: doctorProfileId }] : []),
+          ],
+        },
+      });
+
+      const appointmentIds = appointments.map((apt) => apt.id);
+      const slotIdsToRelease = appointments
+        .filter((apt) =>
+          ['PENDING', 'CONFIRMED', 'CHECKED_IN', 'IN_PROGRESS'].includes(apt.status),
+        )
+        .map((apt) => apt.slotId);
+
+      //  Chuyển trạng thái các slot của cuộc hẹn sắp diễn ra về AVAILABLE
+      if (slotIdsToRelease.length > 0) {
+        await tx.slot.updateMany({
+          where: { id: { in: slotIdsToRelease } },
+          data: { status: 'AVAILABLE' },
+        });
+      }
+
+      //  Xóa các Queue Entries tương ứng
+      await tx.queueEntry.deleteMany({
+        where: {
+          OR: [
+            { appointmentId: { in: appointmentIds } },
+            ...(doctorProfileId ? [{ doctorId: doctorProfileId }] : []),
+          ],
+        },
+      });
+
+      //  Xóa Medical Records tương ứng
+      await tx.medicalRecord.deleteMany({
+        where: {
+          OR: [
+            { appointmentId: { in: appointmentIds } },
+            { patientId: id },
+            ...(doctorProfileId ? [{ doctorId: doctorProfileId }] : []),
+          ],
+        },
+      });
+
+      //  Xóa Appointments tương ứng
+      await tx.appointment.deleteMany({
+        where: { id: { in: appointmentIds } },
+      });
+
+      if (doctorProfileId) {
+        //  Xóa các Slot của bác sĩ
+        await tx.slot.deleteMany({
+          where: { doctorId: doctorProfileId },
+        });
+
+        //  Xóa các ca làm việc của bác sĩ
+        await tx.workSchedule.deleteMany({
+          where: { doctorId: doctorProfileId },
+        });
+
+        //  Xóa hồ sơ bác sĩ
+        await tx.doctor.delete({
+          where: { id: doctorProfileId },
+        });
+      }
+
+      //  Xóa tài khoản User
+      await tx.user.delete({
+        where: { id },
+      });
+    });
+
+    return {
+      message: 'Xóa tài khoản người dùng thành công',
     };
   }
 }

@@ -145,6 +145,7 @@ model Slot {
   startTime      DateTime   @map("start_time") @db.Time()       // Giờ bắt đầu slot (ví dụ: 08:00)
   endTime        DateTime   @map("end_time") @db.Time()         // Giờ kết thúc slot (ví dụ: 08:15)
   status         SlotStatus @default(AVAILABLE)                // Trạng thái slot (Trống, Đã đặt, hoặc Đang khóa)
+  isWalkInOnly   Boolean    @default(false) @map("is_walk_in_only") // Chỉ dành cho khám vãng lai tại quầy
 
   /// Logic thông minh: ID của slot cha. Nếu slot gốc là 08:00–08:30 nhưng bác sĩ khám xong lúc 08:15, 
   /// hệ thống sẽ tự sinh slot con từ 08:15–08:30 và lưu ID của slot cha vào đây nhằm tiếp tục cho bệnh nhân khác đặt lịch.
@@ -175,6 +176,7 @@ model Appointment {
   notes     String?           @db.Text                           // Ghi chú thêm của lễ tân hoặc thông tin nội bộ
   status    AppointmentStatus @default(PENDING)                  // Trạng thái cuộc hẹn, mặc định ban đầu là PENDING (Chờ duyệt)
   bookingType BookingType     @default(ONLINE) @map("booking_type")
+  isPriority  Boolean         @default(false) @map("is_priority")   // Đánh dấu lịch khám ưu tiên (vãng lai)
   createdAt DateTime          @default(now()) @map("created_at") // Thời gian bệnh nhân bấm nút đặt lịch hẹn
   updatedAt DateTime          @updatedAt @map("updated_at")      // Thời gian cập nhật trạng thái lịch hẹn mới nhất
 

@@ -13,22 +13,22 @@ const DOCTORS = [
   {
     name: "Bs. CKI BSNT Mai Thị Hương Lan",
     role: "Trưởng khoa Nội thần kinh",
-    image: "",
+    image: "https://tse2.mm.bing.net/th/id/OIP.YfxOh56RQshAzdURtx6vWQHaLI?r=0&rs=1&pid=ImgDetMain&o=7&rm=3",
   },
   {
     name: "Ths. Bs. CKII Nguyễn Ngọc Thao",
     role: "Giám Đốc Y Khoa Bệnh viện",
-    image: "",
+    image: "https://media.istockphoto.com/id/1397225741/photo/smiling-young-woman-doctor-is-standing-her-office-female-doctor-with-a-stethoscope-is.jpg?s=170667a&w=0&k=20&c=Rbhl1u4rFNhaazuxCTu3dMv0Pto6PSO_AVotC9qPBFs=",
   },
   {
     name: "Bs. CKII Nguyễn Trường Sơn",
     role: "Trưởng đơn vị khám sức khỏe",
-    image: "",
+    image: "https://hthaostudio.com/wp-content/uploads/2022/03/Anh-bac-si-nam-7-min.jpg.webp",
   },
   {
     name: "Bs. CKII Nguyễn Đình Tiến",
     role: "Trưởng khoa Phẫu thuật - Gây mê hồi sức",
-    image: "",
+    image: "https://suckhoedoisong.qltns.mediacdn.vn/324455921873985536/2022/12/29/1-1672277114662196711643.jpg",
   },
 ];
 
@@ -36,15 +36,15 @@ const DOCTORS = [
 const SPECIALTIES = [
   {
     title: "Ung bướu",
-    image: "",
+    image: "https://nld.mediacdn.vn/291774122806476800/2023/12/12/z4967616667982ab43b5e98bda398c38a2bc0af4750c6d-170237666268660393863.jpg",
   },
   {
     title: "Tim mạch",
-    image: "",
+    image: "https://bvnguyentrai.org.vn/wp-content/uploads/2026/03/1-5.jpg",
   },
   {
     title: "Ngoại tiêu hóa",
-    image: "",
+    image: "https://bvnguyentrai.org.vn/wp-content/uploads/2026/02/z7636414639875_c99da5218f82f73af1236243ed4177a3-1536x1090.jpg",
   }
 ];
 
@@ -196,7 +196,7 @@ export default function LandingPage() {
             
             {/* Nút đặt lịch hẹn luôn xuất hiện bên phải */}
             <Link href={bookingUrl} className="btn btn-primary">
-              Đặt lịch hẹn <ArrowRight size={16} />
+              Đến trang dashboard <ArrowRight size={16} />
             </Link>
           </div>
 
@@ -238,8 +238,8 @@ export default function LandingPage() {
           <div className="hero-image-wrapper">
             <div className="hero-image-container">
               <img 
-                src="https://images.unsplash.com/photo-1587351021759-3e566b6af7cc?auto=format&fit=crop&q=80&w=1200" 
-                alt="Hoan My Hospital"
+                src="https://tse3.mm.bing.net/th/id/OIP.5uAw-3JDdDSdiZyCEc-oagHaE8?r=0&rs=1&pid=ImgDetMain&o=7&rm=3" 
+                alt="C-Clinic Hospital"
                 className="hero-img"
               />
             </div>

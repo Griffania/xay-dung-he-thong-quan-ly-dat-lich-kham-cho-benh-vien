@@ -1,5 +1,6 @@
 import { BookingType } from '@prisma/client';
 import {
+  IsBoolean,
   IsEnum,
   IsNotEmpty,
   IsOptional,
@@ -29,4 +30,8 @@ export class CreateAppointmentsDto {
   })
   @IsOptional()
   bookingType?: BookingType;
+
+  @IsBoolean({ message: 'Trạng thái ưu tiên phải là kiểu boolean' })
+  @IsOptional()
+  isPriority?: boolean;
 }

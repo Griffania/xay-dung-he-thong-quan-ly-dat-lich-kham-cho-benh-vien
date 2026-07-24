@@ -135,7 +135,7 @@ export default function LoginPage() {
                 if (emailError) validateEmail(e.target.value);
               }}
               onBlur={(e) => validateEmail(e.target.value)}
-              placeholder="...@gmail.com"
+              placeholder="...@clinic.com"
               className={`input-control ${emailError ? 'error' : ''}`}
             />
           </div>

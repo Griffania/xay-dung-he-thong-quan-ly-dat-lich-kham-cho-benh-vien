@@ -77,8 +77,8 @@ export default function DashboardLayout({
     switch (role) {
       case 'ADMIN':
         return [
-          { label: 'Quản lý Tài khoản', href: '/dashboard/admin#users', icon: Users },
-          { label: 'Quản lý Bác sĩ', href: '/dashboard/admin/doctors', icon: User },
+          { label: 'Quản lý Tài khoản', href: '/dashboard/admin', icon: Users },
+          { label: 'Quản lý Nhân sự', href: '/dashboard/admin/doctors', icon: User },
           { label: 'Quản lý Chuyên khoa', href: '/dashboard/admin/specialties', icon: Stethoscope },
         ];
       case 'DOCTOR':

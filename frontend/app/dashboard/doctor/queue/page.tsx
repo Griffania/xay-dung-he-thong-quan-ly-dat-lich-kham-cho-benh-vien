@@ -11,6 +11,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import api from '../../../../lib/api';
+import { formatDate } from '../../../../lib/utils/datetime';
 import '../doctor-custom.css';
 
 interface Patient {
@@ -31,6 +32,7 @@ interface QueueEntry {
     symptoms?: string;
     notes?: string;
     patient: Patient;
+    slotId?: string;
   };
 }
 
@@ -57,6 +59,7 @@ export default function DoctorQueuePage() {
   const [followUpDate, setFollowUpDate] = useState('');
 
   const [isSaving, setIsSaving] = useState(false);
+  const [shouldSplitSlot, setShouldSplitSlot] = useState(true);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -135,7 +138,23 @@ export default function DoctorQueuePage() {
         followUpDate: followUpDate || undefined
       });
 
-      setSuccessMsg(`Lưu hồ sơ bệnh án thành công cho bệnh nhân: ${patientName}`);
+      let splitMessage = '';
+      const slotId = queueData.currentlyExamining.appointment.slotId;
+      if (shouldSplitSlot && slotId) {
+        try {
+          const splitResponse = await api.post(`/slots/${slotId}/split`, {
+            completedAt: new Date().toISOString()
+          });
+          if (splitResponse.data?.message) {
+            splitMessage = ` (${splitResponse.data.message})`;
+          }
+        } catch (splitErr) {
+          console.error('Lỗi khi tự động tách slot:', splitErr);
+          splitMessage = ' (Không thể tự động tách slot khám)';
+        }
+      }
+
+      setSuccessMsg(`Lưu hồ sơ bệnh án thành công cho bệnh nhân: ${patientName}.${splitMessage}`);
       setDiagnosis('');
       setTreatment('');
       setPrescription('');
@@ -390,13 +409,33 @@ export default function DoctorQueuePage() {
                     <label className="form-label uppercase">Hẹn ngày tái khám</label>
                     <input
                       type="date"
+                      data-date={followUpDate ? formatDate(followUpDate) : 'dd/mm/yyyy'}
                       value={followUpDate}
                       min={new Date().toISOString().split('T')[0]}
                       onChange={(e) => setFollowUpDate(e.target.value)}
                       className="input-control"
                       style={{ paddingLeft: '1rem' }}
                     />
+                    {followUpDate && (
+                      <p style={{ fontSize: '11px', color: 'var(--color-primary)', marginTop: '0.25rem', fontWeight: 600 }}>
+                        Ngày tái khám: {formatDate(followUpDate)}
+                      </p>
+                    )}
                   </div>
+                </div>
+
+                {/* Checkbox for splitting slot */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.25rem', padding: '0.25rem 0' }}>
+                  <input
+                    type="checkbox"
+                    id="shouldSplitSlot"
+                    checked={shouldSplitSlot}
+                    onChange={(e) => setShouldSplitSlot(e.target.checked)}
+                    style={{ cursor: 'pointer', width: '1rem', height: '1rem' }}
+                  />
+                  <label htmlFor="shouldSplitSlot" style={{ fontSize: '0.875rem', color: 'var(--text-muted)', cursor: 'pointer', fontWeight: 600 }}>
+                    Tách thời gian còn dư thành slot mới (nếu hoàn thành sớm)
+                  </label>
                 </div>
 
                 {/* Submit button */}

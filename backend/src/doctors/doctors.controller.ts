@@ -119,7 +119,14 @@ export class DoctorsController {
   }
 
   @Get(':id/slots/available')
-  getAvailableSlots(@Param('id') id: string, @Query('date') date: string) {
-    return this.doctorsService.findAvailableSlots(id, date);
+  getAvailableSlots(
+    @Param('id') id: string,
+    @Query('date') date: string,
+    @Query('includeVacated') includeVacated?: string,
+    @Req() req?: any,
+  ) {
+    const userRole = req?.user?.role;
+    const includeVacatedBool = includeVacated === 'true';
+    return this.doctorsService.findAvailableSlots(id, date, userRole, includeVacatedBool);
   }
 }

@@ -124,7 +124,15 @@ export class WorkSchedulesService {
           startTime: new Date(t),
           endTime: new Date(t + slotDurationMs),
           status: SlotStatus.AVAILABLE,
+          isWalkInOnly: false,
         });
+      }
+      // Đánh dấu 3 slot cuối cùng chỉ dành cho vãng lai
+      const totalSlots = slotsData.length;
+      for (let i = 0; i < totalSlots; i++) {
+        if (i >= totalSlots - 3) {
+          slotsData[i].isWalkInOnly = true;
+        }
       }
       if (slotsData.length > 0) {
         await tx.slot.createMany({
@@ -373,7 +381,15 @@ export class WorkSchedulesService {
           startTime: new Date(t),
           endTime: new Date(t + slotDurationMs),
           status: SlotStatus.AVAILABLE,
+          isWalkInOnly: false,
         });
+      }
+      // Đánh dấu 3 slot cuối cùng chỉ dành cho vãng lai
+      const totalSlots = slotsData.length;
+      for (let i = 0; i < totalSlots; i++) {
+        if (i >= totalSlots - 3) {
+          slotsData[i].isWalkInOnly = true;
+        }
       }
       if (slotsData.length > 0) {
         await tx.slot.createMany({

@@ -14,6 +14,7 @@ import {
   ArrowRight,
   ClipboardCheck
 } from 'lucide-react';
+import { displayTimeRange, formatDate } from '../../../../lib/utils/datetime';
 import api from '../../../../lib/api';
 import '../receptionist.css';
 
@@ -55,12 +56,43 @@ export default function ReceptionistBookingPage() {
   const [selectedSpecialtyId, setSelectedSpecialtyId] = useState('');
   const [doctors, setDoctors] = useState<{ id: string; user: { fullName: string } }[]>([]);
   const [selectedDoctorId, setSelectedDoctorId] = useState('');
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const localDate = new Date();
+    const year = localDate.getFullYear();
+    const month = String(localDate.getMonth() + 1).padStart(2, '0');
+    const day = String(localDate.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  });
   const [slots, setSlots] = useState<{ id: string; startTime: string; endTime: string }[]>([]);
   const [selectedSlotId, setSelectedSlotId] = useState('');
   
   const [isBookingWalkin, setIsBookingWalkin] = useState(false);
   const [bookingSuccess, setBookingSuccess] = useState<string | null>(null);
   const [bookingError, setBookingError] = useState<string | null>(null);
+  const [isPriority, setIsPriority] = useState(false);
+
+  const localDateStr = (() => {
+    const localDate = new Date();
+    const year = localDate.getFullYear();
+    const month = String(localDate.getMonth() + 1).padStart(2, '0');
+    const day = String(localDate.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  })();
+
+  const filteredSlots = slots.filter(s => {
+    if (selectedDate !== localDateStr) return true;
+    const slotDateObj = new Date(s.startTime);
+    const slotHour = slotDateObj.getUTCHours();
+    const slotMinute = slotDateObj.getUTCMinutes();
+    
+    const now = new Date();
+    const currentHour = now.getHours();
+    const currentMinute = now.getMinutes();
+    
+    if (slotHour < currentHour) return false;
+    if (slotHour === currentHour && slotMinute <= currentMinute) return false;
+    return true;
+  });
 
   // Định dạng hiển thị giờ từ chuỗi ISO UTC
   const formatSlotTime = (isoTimeStr: string) => {
@@ -89,6 +121,13 @@ export default function ReceptionistBookingPage() {
       console.error('Lỗi tìm kiếm bệnh nhân:', err);
     } finally {
       setIsSearchingPatients(false);
+    }
+  };
+
+  // Hỗ trợ nhấn phím Enter để thực hiện tìm kiếm bệnh nhân
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleSearchDbPatients();
     }
   };
 
@@ -124,17 +163,16 @@ export default function ReceptionistBookingPage() {
     loadDoctors();
   }, [selectedSpecialtyId]);
 
-  // Lấy slot trống trong ngày hôm nay của bác sĩ
+  // Lấy slot trống của bác sĩ theo ngày được chọn
   useEffect(() => {
-    if (!selectedDoctorId) {
+    if (!selectedDoctorId || !selectedDate) {
       setSlots([]);
       setSelectedSlotId('');
       return;
     }
     const loadSlots = async () => {
       try {
-        const todayStr = new Date().toISOString().split('T')[0];
-        const res = await api.get(`/doctors/${selectedDoctorId}/slots/available?date=${todayStr}`);
+        const res = await api.get(`/doctors/${selectedDoctorId}/slots/available?date=${selectedDate}`);
         setSlots(res.data || []);
         setSelectedSlotId('');
       } catch (err) {
@@ -142,7 +180,7 @@ export default function ReceptionistBookingPage() {
       }
     };
     loadSlots();
-  }, [selectedDoctorId]);
+  }, [selectedDoctorId, selectedDate]);
 
   // Thực hiện Check-in sau khi book thành công để lấy số thứ tự
   const handleCheckIn = async (apptId: string) => {
@@ -205,6 +243,12 @@ export default function ReceptionistBookingPage() {
     e.preventDefault();
     if (!selectedPatient || !selectedSlotId) return;
 
+    // Kiểm tra xem slot được chọn có nằm trong danh sách slot khả dụng (chưa trôi qua) không
+    if (!filteredSlots.some(s => s.id === selectedSlotId)) {
+      setBookingError('Khung giờ khám này đã trôi qua. Vui lòng chọn khung giờ khác!');
+      return;
+    }
+
     setIsBookingWalkin(true);
     setBookingSuccess(null);
     setBookingError(null);
@@ -213,7 +257,8 @@ export default function ReceptionistBookingPage() {
       const res = await api.post('/appointments', {
         slotId: selectedSlotId,
         patientId: selectedPatient.id,
-        bookingType: 'WALK_IN'
+        bookingType: 'WALK_IN',
+        isPriority
       });
 
       const appt = res.data.data || res.data;
@@ -229,6 +274,7 @@ export default function ReceptionistBookingPage() {
       setSelectedSlotId('');
       setPatientSearchQuery('');
       setDbPatients([]);
+      setIsPriority(false);
       
       setTimeout(() => {
         setBookingSuccess(null);
@@ -328,7 +374,14 @@ export default function ReceptionistBookingPage() {
                       <input type="text" required placeholder="Họ và tên *" value={regName} onChange={(e) => setRegName(e.target.value)} className="input-control receptionist-pl-1" />
                       <input type="tel" placeholder="Số điện thoại" value={regPhone} onChange={(e) => setRegPhone(e.target.value)} className="input-control receptionist-pl-1" />
                       <input type="email" placeholder="Địa chỉ Email" value={regEmail} onChange={(e) => setRegEmail(e.target.value)} className="input-control receptionist-pl-1-span" />
-                      <input type="date" placeholder="Ngày sinh" value={regBirth} onChange={(e) => setRegBirth(e.target.value)} className="input-control receptionist-pl-1-span" />
+                      <div className="receptionist-pl-1-span" style={{ display: 'flex', flexDirection: 'column' }}>
+                        <input type="date" placeholder="Ngày sinh" data-date={regBirth ? formatDate(regBirth) : 'dd/mm/yyyy'} value={regBirth} onChange={(e) => setRegBirth(e.target.value)} className="input-control w-full" />
+                        {regBirth && (
+                          <span style={{ fontSize: '11px', color: 'var(--color-primary)', marginTop: '0.25rem', fontWeight: 600 }}>
+                            Ngày sinh: {formatDate(regBirth)}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <div className="receptionist-reg-actions">
                       <button type="submit" className="btn btn-primary flex-1 receptionist-reg-btn">Lưu hồ sơ</button>
@@ -355,7 +408,8 @@ export default function ReceptionistBookingPage() {
                       type="text"
                       value={patientSearchQuery}
                       onChange={(e) => setPatientSearchQuery(e.target.value)}
-                      placeholder="Tìm bệnh nhân theo Tên / SĐT..."
+                      onKeyDown={handleKeyDown}
+                      placeholder=" Tên / SĐT..."
                       className="input-control flex-1 receptionist-pl-1"
                     />
                     <button
@@ -421,7 +475,21 @@ export default function ReceptionistBookingPage() {
                 </div>
 
                 <div className="form-group receptionist-mb-0">
-                  <label className="form-label">Giờ khám còn trống hôm nay</label>
+                  <label className="form-label">Ngày khám bệnh</label>
+                  <input
+                    type="date"
+                    required
+                    value={selectedDate}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    className="input-control w-full"
+                    style={{ paddingLeft: '1rem' }}
+                  />
+                </div>
+
+                <div className="form-group receptionist-mb-0">
+                  <label className="form-label">
+                    Giờ khám còn trống ngày {selectedDate ? formatDate(selectedDate) : 'hôm nay'}
+                  </label>
                   <select
                     required
                     disabled={!selectedDoctorId}
@@ -430,17 +498,30 @@ export default function ReceptionistBookingPage() {
                     className="select-control w-full"
                   >
                     <option value="" disabled>-- Chọn khung giờ khám --</option>
-                    {slots.map(s => (
+                    {filteredSlots.map(s => (
                       <option key={s.id} value={s.id}>
                         {displayTimeRange(s.startTime, s.endTime)}
                       </option>
                     ))}
-                    {selectedDoctorId && slots.length === 0 && (
+                    {selectedDoctorId && filteredSlots.length === 0 && (
                       <option value="" disabled className="receptionist-text-danger">
-                        Bác sĩ hết slot trống trong hôm nay!
+                        Bác sĩ hết slot trống trong ngày {selectedDate ? formatDate(selectedDate) : 'hôm nay'}!
                       </option>
                     )}
                   </select>
+                </div>
+
+                <div className="form-group receptionist-mb-0" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.25rem 0' }}>
+                  <input
+                    type="checkbox"
+                    id="isPriority"
+                    checked={isPriority}
+                    onChange={(e) => setIsPriority(e.target.checked)}
+                    style={{ width: '1.15rem', height: '1.15rem', cursor: 'pointer' }}
+                  />
+                  <label htmlFor="isPriority" className="form-label" style={{ margin: 0, cursor: 'pointer', fontWeight: 600, fontSize: '0.8125rem' }}>
+                    Đánh dấu là bệnh nhân Ưu tiên (Khám trước)
+                  </label>
                 </div>
 
                 {/* Actions */}

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import api from '../../../../lib/api';
-import { displayTimeRange } from '../../../../lib/utils/datetime';
+import { displayTimeRange, formatDate } from '../../../../lib/utils/datetime';
 import SearchableSelect from '../../../../components/ui/SearchableSelect';
 import { PlusCircle, CheckCircle, AlertCircle } from 'lucide-react';
 
@@ -35,6 +35,22 @@ export default function PatientBookAppointmentPage() {
   const maxDateObj = new Date();
   maxDateObj.setDate(maxDateObj.getDate() + MAX_BOOKING_DAYS_AHEAD);
   const maxDateStr = toDateInputValue(maxDateObj);
+
+  // Lọc bỏ các slot đã qua giờ trong ngày hôm nay ở client
+  const filteredSlots = slotsList.filter(s => {
+    if (selectedDate !== todayStr) return true;
+    const slotDateObj = new Date(s.startTime);
+    const slotHour = slotDateObj.getUTCHours();
+    const slotMinute = slotDateObj.getUTCMinutes();
+    
+    const now = new Date();
+    const currentHour = now.getHours();
+    const currentMinute = now.getMinutes();
+    
+    if (slotHour < currentHour) return false;
+    if (slotHour === currentHour && slotMinute <= currentMinute) return false;
+    return true;
+  });
 
   useEffect(() => {
     const fetchSpecialties = async () => {
@@ -94,6 +110,12 @@ export default function PatientBookAppointmentPage() {
     e.preventDefault();
     if (!selectedSlotId) return;
 
+    // Kiểm tra xem slot được chọn có nằm trong danh sách slot khả dụng (chưa trôi qua) không
+    if (!filteredSlots.some(s => s.id === selectedSlotId)) {
+      setBookingError('Khung giờ khám này đã trôi qua. Vui lòng chọn khung giờ khác!');
+      return;
+    }
+
     // Ràng buộc lần cuối phía client trước khi gửi request
     if (selectedDate < todayStr || selectedDate > maxDateStr) {
       setBookingError(`Chỉ được đặt lịch khám từ hôm nay đến trong vòng ${MAX_BOOKING_DAYS_AHEAD} ngày tới.`);
@@ -114,7 +136,7 @@ export default function PatientBookAppointmentPage() {
       const chosenSlot = slotsList.find(s => s.id === selectedSlotId);
       const slotTimeStr = chosenSlot ? displayTimeRange(chosenSlot.startTime, chosenSlot.endTime) : '';
 
-      setSuccessBooking(`Đăng ký thành công cuộc hẹn khám với ${docName} lúc ${slotTimeStr} ngày ${selectedDate.split('-').reverse().join('/')}. Vui lòng chờ xác nhận.`);
+      setSuccessBooking(`Đăng ký thành công cuộc hẹn khám với ${docName} lúc ${slotTimeStr} ngày ${selectedDate.split('-').reverse().join('/')}.`);
 
       setSelectedSpecialtyId('');
       setSelectedDoctorId('');
@@ -192,6 +214,7 @@ export default function PatientBookAppointmentPage() {
             <input
               type="date"
               required
+              data-date={selectedDate ? formatDate(selectedDate) : 'dd/mm/yyyy'}
               value={selectedDate}
               min={todayStr}
               max={maxDateStr}
@@ -199,6 +222,11 @@ export default function PatientBookAppointmentPage() {
               className="input-control"
               style={{ paddingLeft: '1rem' }}
             />
+            {selectedDate && (
+              <p style={{ fontSize: '11px', color: 'var(--color-primary)', marginTop: '0.25rem', fontWeight: 600 }}>
+                Ngày đã chọn: {formatDate(selectedDate)}
+              </p>
+            )}
           </div>
 
           {/* Slot select */}
@@ -212,12 +240,12 @@ export default function PatientBookAppointmentPage() {
               className="select-control w-full"
             >
               <option value="" disabled>-- Chọn giờ khám --</option>
-              {slotsList.map(s => (
+              {filteredSlots.map(s => (
                 <option key={s.id} value={s.id}>
                   {displayTimeRange(s.startTime, s.endTime)}
                 </option>
               ))}
-              {selectedDate && selectedDoctorId && slotsList.length === 0 && (
+              {selectedDate && selectedDoctorId && filteredSlots.length === 0 && (
                 <option value="" disabled style={{ color: 'var(--color-warning)' }}>
                   Bác sĩ không có ca khám khả dụng ngày này
                 </option>
