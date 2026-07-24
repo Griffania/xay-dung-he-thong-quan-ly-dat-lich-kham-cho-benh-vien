@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { SlotStatus } from '@prisma/client';
@@ -27,17 +28,19 @@ export class SlotsService {
       status: SlotStatus.AVAILABLE,
     };
 
-    // Nếu ngày truy vấn là hôm nay, chỉ lấy các slot có giờ bắt đầu lớn hơn giờ hiện tại (local time)
     const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
+    // Chuyển sang múi giờ Việt Nam (UTC+7) để so sánh thực tế
+    const vnTime = new Date(now.getTime() + 7 * 60 * 60 * 1000);
+
+    const year = vnTime.getUTCFullYear();
+    const month = String(vnTime.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(vnTime.getUTCDate()).padStart(2, '0');
     const todayStr = `${year}-${month}-${day}`;
 
     if (dateStr === todayStr) {
-      const hours = String(now.getHours()).padStart(2, '0');
-      const minutes = String(now.getMinutes()).padStart(2, '0');
-      const seconds = String(now.getSeconds()).padStart(2, '0');
+      const hours = String(vnTime.getUTCHours()).padStart(2, '0');
+      const minutes = String(vnTime.getUTCMinutes()).padStart(2, '0');
+      const seconds = String(vnTime.getUTCSeconds()).padStart(2, '0');
       const currentTimeOfDay = new Date(
         `1970-01-01T${hours}:${minutes}:${seconds}.000Z`,
       );
@@ -55,13 +58,38 @@ export class SlotsService {
 
   //Khóa thủ công một slot thời gian (ví dụ bác sĩ có việc đột xuất)
 
-  async lockSlot(id: string) {
+  async lockSlot(id: string, user?: any) {
     const slot = await this.prisma.slot.findUnique({
       where: { id },
     });
 
     if (!slot) {
       throw new NotFoundException('Không tìm thấy slot khám yêu cầu!');
+    }
+
+    if (user && user.role === 'DOCTOR') {
+      const doctor = await this.prisma.doctor.findUnique({
+        where: { userId: user.userId },
+      });
+      if (!doctor || slot.doctorId !== doctor.id) {
+        throw new ForbiddenException('Bạn không có quyền khóa slot này!');
+      }
+
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      const todayStr = `${year}-${month}-${day}`;
+
+      const slotDate = slot.date;
+      const slotYear = slotDate.getUTCFullYear();
+      const slotMonth = String(slotDate.getUTCMonth() + 1).padStart(2, '0');
+      const slotDay = String(slotDate.getUTCDate()).padStart(2, '0');
+      const slotDateStr = `${slotYear}-${slotMonth}-${slotDay}`;
+
+      if (todayStr !== slotDateStr) {
+        throw new BadRequestException('Bác sĩ chỉ được phép khóa slot khám trong ngày hiện tại!');
+      }
     }
 
     if (slot.status === SlotStatus.BOOKED) {
@@ -77,13 +105,38 @@ export class SlotsService {
   }
 
   //Mở khóa lại slot đã bị khóa thủ công
-  async unlockSlot(id: string) {
+  async unlockSlot(id: string, user?: any) {
     const slot = await this.prisma.slot.findUnique({
       where: { id },
     });
 
     if (!slot) {
       throw new NotFoundException('Không tìm thấy slot khám yêu cầu!');
+    }
+
+    if (user && user.role === 'DOCTOR') {
+      const doctor = await this.prisma.doctor.findUnique({
+        where: { userId: user.userId },
+      });
+      if (!doctor || slot.doctorId !== doctor.id) {
+        throw new ForbiddenException('Bạn không có quyền mở khóa slot này!');
+      }
+
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      const todayStr = `${year}-${month}-${day}`;
+
+      const slotDate = slot.date;
+      const slotYear = slotDate.getUTCFullYear();
+      const slotMonth = String(slotDate.getUTCMonth() + 1).padStart(2, '0');
+      const slotDay = String(slotDate.getUTCDate()).padStart(2, '0');
+      const slotDateStr = `${slotYear}-${slotMonth}-${slotDay}`;
+
+      if (todayStr !== slotDateStr) {
+        throw new BadRequestException('Bác sĩ chỉ được phép mở khóa slot khám trong ngày hiện tại!');
+      }
     }
 
     if (slot.status !== SlotStatus.LOCKED) {
@@ -98,14 +151,7 @@ export class SlotsService {
     });
   }
 
-  /**
-   * Logic tách slot thông minh (Smart Slot Splitting)
-   * Sinh ra slot con khả dụng từ khoảng thời gian còn dư khi bác sĩ hoàn thành khám sớm.
-   * @param slotId ID của slot hiện tại đang khám (trạng thái BOOKED)
-   * @param completedAt Thời điểm bác sĩ kết thúc ca khám thực tế
-   * @param minRemainingMin Thời lượng tối thiểu (phút) của slot con mới được sinh ra
-   */
-  async splitSlot(slotId: string, completedAt: Date, minRemainingMin = 10) {
+  async splitSlot(slotId: string, completedAt: Date, user?: any, minRemainingMin = 10) {
     const slot = await this.prisma.slot.findUnique({
       where: { id: slotId },
     });
@@ -114,16 +160,42 @@ export class SlotsService {
       throw new NotFoundException('Không tìm thấy slot khám yêu cầu!');
     }
 
+    if (user && user.role === 'DOCTOR') {
+      const doctor = await this.prisma.doctor.findUnique({
+        where: { userId: user.userId },
+      });
+      if (!doctor || slot.doctorId !== doctor.id) {
+        throw new ForbiddenException('Bạn không có quyền tách slot này!');
+      }
+
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      const todayStr = `${year}-${month}-${day}`;
+
+      const slotDate = slot.date;
+      const slotYear = slotDate.getUTCFullYear();
+      const slotMonth = String(slotDate.getUTCMonth() + 1).padStart(2, '0');
+      const slotDay = String(slotDate.getUTCDate()).padStart(2, '0');
+      const slotDateStr = `${slotYear}-${slotMonth}-${slotDay}`;
+
+      if (todayStr !== slotDateStr) {
+        throw new BadRequestException('Bác sĩ chỉ được phép tách slot khám trong ngày hiện tại!');
+      }
+    }
+
     if (slot.status !== SlotStatus.BOOKED) {
       throw new BadRequestException(
         'Slot cần tách phải ở trạng thái đã đặt (BOOKED)!',
       );
     }
 
-    // Chuyển đổi completedAt thành mốc giờ ngày 1970-01-01 UTC để so sánh
-    const hours = String(completedAt.getUTCHours()).padStart(2, '0');
-    const minutes = String(completedAt.getUTCMinutes()).padStart(2, '0');
-    const seconds = String(completedAt.getUTCSeconds()).padStart(2, '0');
+    // Chuyển đổi completedAt thành múi giờ Việt Nam (UTC+7) rồi sang mốc giờ ngày 1970-01-01 UTC để so sánh
+    const completedAtLocal = new Date(completedAt.getTime() + 7 * 60 * 60 * 1000);
+    const hours = String(completedAtLocal.getUTCHours()).padStart(2, '0');
+    const minutes = String(completedAtLocal.getUTCMinutes()).padStart(2, '0');
+    const seconds = String(completedAtLocal.getUTCSeconds()).padStart(2, '0');
     const completedTimeOfDay = new Date(
       `1970-01-01T${hours}:${minutes}:${seconds}.000Z`,
     );
@@ -160,6 +232,7 @@ export class SlotsService {
         startTime: completedTimeOfDay, // Bắt đầu ngay từ lúc bác sĩ vừa khám xong ca trước
         endTime: slot.endTime, // Kết thúc tại đúng giờ kết thúc ban đầu của ca trước
         status: SlotStatus.AVAILABLE, // Trạng thái Trống để người khác đặt
+        isWalkInOnly: slot.isWalkInOnly,
         parentSlotId: slot.id, // Lưu lại ID của slot cha để sau này biết slot này do đâu mà ra
       },
     });

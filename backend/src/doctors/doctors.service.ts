@@ -447,7 +447,12 @@ export class DoctorsService {
   }
   //  Lấy danh sách các khung giờ khám còn trống (AVAILABLE) của bác sĩ theo ngày cụ thể
 
-  async findAvailableSlots(doctorId: string, dateStr: string) {
+  async findAvailableSlots(
+    doctorId: string,
+    dateStr: string,
+    userRole?: string,
+    includeVacated?: boolean,
+  ) {
     const doctor = await this.prisma.doctor.findUnique({
       where: { id: doctorId },
     });
@@ -459,33 +464,72 @@ export class DoctorsService {
     if (isNaN(parsedDate.getTime())) {
       throw new BadRequestException('ngày truy vấn không hợp lệ');
     }
-    const whereClause: any = {
-      doctorId,
-      date: parsedDate,
-      status: SlotStatus.AVAILABLE, //chỉ lấy khung giờ còn trống
-    };
-    //nếu slot chọn là ngày hôm nay , chỉ lấy các slot có giờ bắt đầu lớn hơn hiện tại (local)
+
     const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
+    // Chuyển sang múi giờ Việt Nam (UTC+7) để so sánh thực tế
+    const vnTime = new Date(now.getTime() + 7 * 60 * 60 * 1000);
+
+    const year = vnTime.getUTCFullYear();
+    const month = String(vnTime.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(vnTime.getUTCDate()).padStart(2, '0');
     const todayStr = `${year}-${month}-${day}`;
 
+    const normalWhere: any = {
+      doctorId,
+      date: parsedDate,
+      status: SlotStatus.AVAILABLE,
+    };
+
     if (dateStr === todayStr) {
-      const hours = String(now.getHours()).padStart(2, '0');
-      const minutes = String(now.getMinutes()).padStart(2, '0');
-      const seconds = String(now.getSeconds()).padStart(2, '0');
+      const hours = String(vnTime.getUTCHours()).padStart(2, '0');
+      const minutes = String(vnTime.getUTCMinutes()).padStart(2, '0');
+      const seconds = String(vnTime.getUTCSeconds()).padStart(2, '0');
       //so sánh theo giờ trong ngày 1970-01-01 UTC của prisma
       const currentTimeOFDay = new Date(
         `1970-01-01T${hours}:${minutes}:${seconds}.000Z`,
       );
-      whereClause.startTime = {
+      normalWhere.startTime = {
         gt: currentTimeOFDay, //lớn hơn giờ hiện tại
       };
     }
+
+    // Hide walk-in-only slots from patients
+    if (userRole === Role.PATIENT) {
+      normalWhere.isWalkInOnly = false;
+    }
+
+    const conditions: any[] = [normalWhere];
+
+    if (includeVacated) {
+      const vacatedWhere: any = {
+        doctorId,
+        date: parsedDate,
+        status: SlotStatus.AVAILABLE,
+        appointments: {
+          some: {
+            status: AppointmentStatus.NO_SHOW,
+          },
+        },
+      };
+      conditions.push(vacatedWhere);
+    }
+
     //lấy danh sách slot và sấp xếp theo thời gian bắt đầu tăng dần
     return this.prisma.slot.findMany({
-      where: whereClause,
+      where: {
+        OR: conditions,
+      },
+      include: {
+        appointments: {
+          where: {
+            status: AppointmentStatus.NO_SHOW,
+          },
+          select: {
+            id: true,
+            status: true,
+          },
+        },
+      },
       orderBy: { startTime: 'asc' },
     });
   }
@@ -501,7 +545,13 @@ export class DoctorsService {
     }
 
     let targetDateStr = dateStr;
-    if (!targetDateStr) {
+    if (currentUser.role === Role.DOCTOR) {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      targetDateStr = `${year}-${month}-${day}`;
+    } else if (!targetDateStr) {
       const now = new Date();
       const year = now.getFullYear();
       const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -702,9 +752,18 @@ export class DoctorsService {
       throw new NotFoundException('Không tìm thấy hồ sơ bác sĩ trên hệ thống!');
     }
 
+    let targetDateStr = dateStr;
+    if (currentUser.role === Role.DOCTOR) {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      targetDateStr = `${year}-${month}-${day}`;
+    }
+
     return this.queuesService.getQueueMonitor({
       doctorId: doctor.id,
-      date: dateStr,
+      date: targetDateStr,
     });
   }
 }

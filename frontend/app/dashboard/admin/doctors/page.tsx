@@ -15,9 +15,12 @@ import {
   Layers,
   ChevronRight,
   ShieldCheck,
-  UserCheck
+  UserCheck,
+  Users,
+  UserPlus
 } from 'lucide-react';
 import api from '../../../../lib/api';
+import { formatDate } from '../../../../lib/utils/datetime';
 
 interface Specialty {
   id: string;
@@ -84,6 +87,18 @@ export default function DoctorManagementPage() {
   const [isSavingDoctor, setIsSavingDoctor] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
+
+  // Modal tạo lễ tân / admin mới
+  const [showCreateStaffModal, setShowCreateStaffModal] = useState(false);
+  const [createStaffRole, setCreateStaffRole] = useState<'RECEPTIONIST' | 'ADMIN'>('RECEPTIONIST');
+  const [staffEmail, setStaffEmail] = useState('');
+  const [staffPassword, setStaffPassword] = useState('');
+  const [staffFullName, setStaffFullName] = useState('');
+  const [staffPhone, setStaffPhone] = useState('');
+  const [staffBirthDate, setStaffBirthDate] = useState('');
+  const [isSavingStaff, setIsSavingStaff] = useState(false);
+  const [staffSaveError, setStaffSaveError] = useState<string | null>(null);
+  const [staffSaveSuccess, setStaffSaveSuccess] = useState<string | null>(null);
 
   // Modal thêm lịch làm việc (WorkSchedule)
   const [showScheduleModal, setShowScheduleModal] = useState(false);
@@ -193,6 +208,43 @@ export default function DoctorManagementPage() {
     }
   };
 
+  // Tạo lễ tân hoặc admin mới
+  const handleCreateStaff = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setStaffSaveError(null);
+    setStaffSaveSuccess(null);
+    setIsSavingStaff(true);
+
+    try {
+      await api.post('/users', {
+        email: staffEmail,
+        password: staffPassword,
+        fullName: staffFullName,
+        phone: staffPhone || undefined,
+        birthDate: staffBirthDate ? new Date(staffBirthDate).toISOString() : undefined,
+        role: createStaffRole
+      });
+
+      const roleName = createStaffRole === 'ADMIN' ? 'Quản trị viên' : 'Lễ tân';
+      setStaffSaveSuccess(`Tạo tài khoản ${roleName} mới thành công!`);
+      setStaffEmail('');
+      setStaffPassword('');
+      setStaffFullName('');
+      setStaffPhone('');
+      setStaffBirthDate('');
+      
+      setTimeout(() => {
+        setShowCreateStaffModal(false);
+        setStaffSaveSuccess(null);
+      }, 1500);
+    } catch (err: any) {
+      const message = err.response?.data?.message || 'Có lỗi xảy ra khi tạo tài khoản!';
+      setStaffSaveError(Array.isArray(message) ? message[0] : message);
+    } finally {
+      setIsSavingStaff(false);
+    }
+  };
+
   // Mở modal lập lịch và đặt lại các giá trị mặc định tránh lưu dữ liệu cũ bị lỗi
   const handleOpenScheduleModal = (doctor: Doctor) => {
     setSelectedDoctor(doctor);
@@ -265,18 +317,44 @@ export default function DoctorManagementPage() {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="font-black text-slate-800 tracking-tight flex items-center gap-2" style={{ fontSize: '1.875rem' }}>
-            <Stethoscope style={{ width: '2rem', height: '2rem' }} className="text-primary" />
-            Quản lý Danh mục Bác sĩ
+            <Users style={{ width: '2rem', height: '2rem' }} className="text-primary" />
+            Quản lý Nhân sự
           </h1>
         </div>
         
-        <button 
-          onClick={() => setShowCreateModal(true)}
-          className="btn btn-primary"
-        >
-          <PlusCircle style={{ width: '1rem', height: '1rem' }} />
-          Thêm bác sĩ mới
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button 
+            onClick={() => setShowCreateModal(true)}
+            className="btn btn-primary"
+          >
+            <PlusCircle style={{ width: '1rem', height: '1rem' }} />
+            Thêm bác sĩ mới
+          </button>
+          <button 
+            onClick={() => {
+              setCreateStaffRole('RECEPTIONIST');
+              setShowCreateStaffModal(true);
+              setStaffSaveError(null);
+              setStaffSaveSuccess(null);
+            }}
+            className="btn btn-secondary"
+          >
+            <UserPlus style={{ width: '1rem', height: '1rem' }} />
+            Thêm lễ tân mới
+          </button>
+          <button 
+            onClick={() => {
+              setCreateStaffRole('ADMIN');
+              setShowCreateStaffModal(true);
+              setStaffSaveError(null);
+              setStaffSaveSuccess(null);
+            }}
+            className="btn btn-secondary"
+          >
+            <UserPlus style={{ width: '1rem', height: '1rem' }} />
+            Thêm admin mới
+          </button>
+        </div>
       </div>
 
       {/* Filter and search bar */}
@@ -425,7 +503,7 @@ export default function DoctorManagementPage() {
                 {/* Email */}
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label">Địa chỉ Email đăng nhập</label>
-                  <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="dr.nguyenvana@gmail.com" className="input-control" style={{ paddingLeft: '1rem' }} />
+                  <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="dr....@clinic.com" className="input-control" style={{ paddingLeft: '1rem' }} />
                 </div>
 
                 {/* Password */}
@@ -443,7 +521,12 @@ export default function DoctorManagementPage() {
                 {/* Birth Date */}
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label">Ngày sinh</label>
-                  <input type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} className="input-control" style={{ paddingLeft: '1rem' }} />
+                <input type="date" data-date={birthDate ? formatDate(birthDate) : 'dd/mm/yyyy'} value={birthDate} onChange={(e) => setBirthDate(e.target.value)} className="input-control" style={{ paddingLeft: '1rem' }} />
+                  {birthDate && (
+                    <p style={{ fontSize: '11px', color: 'var(--color-primary)', marginTop: '0.25rem', fontWeight: 600 }}>
+                      Ngày sinh đã chọn: {formatDate(birthDate)}
+                    </p>
+                  )}
                 </div>
 
                 {/* License No */}
@@ -466,6 +549,127 @@ export default function DoctorManagementPage() {
                 </button>
                 <button type="submit" disabled={isSavingDoctor} className="btn btn-primary flex-1">
                   {isSavingDoctor ? 'Đang tạo...' : 'Xác nhận tạo'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* CREATE STAFF MODAL */}
+      {showCreateStaffModal && (
+        <div className="modal-backdrop">
+          <div className="modal-content p-6">
+            <div className="accent-bar"></div>
+
+            <h3 className="modal-title mb-4">
+              <UserPlus style={{ width: '1.25rem', height: '1.25rem', color: 'var(--color-primary)' }} />
+              Thêm {createStaffRole === 'ADMIN' ? 'quản trị viên (Admin)' : 'lễ tân (Receptionist)'} mới
+            </h3>
+
+            {staffSaveSuccess && (
+              <div className="alert alert-success" style={{ padding: '0.75rem', fontSize: '0.75rem', marginBottom: '1rem' }}>
+                <CheckCircle style={{ width: '1rem', height: '1rem', marginTop: '2px' }} />
+                <span>{staffSaveSuccess}</span>
+              </div>
+            )}
+
+            {staffSaveError && (
+              <div className="alert alert-error" style={{ padding: '0.75rem', fontSize: '0.75rem', marginBottom: '1rem' }}>
+                <AlertCircle style={{ width: '1rem', height: '1rem', marginTop: '2px' }} />
+                <span>{staffSaveError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleCreateStaff} className="flex flex-col gap-4">
+              {/* FullName */}
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Họ và tên</label>
+                <input 
+                  type="text" 
+                  required
+                  value={staffFullName} 
+                  onChange={(e) => setStaffFullName(e.target.value)} 
+                  placeholder="E.g. Nguyễn Văn A" 
+                  className="input-control"
+                  style={{ paddingLeft: '1rem' }}
+                />
+              </div>
+
+              {/* Email */}
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Địa chỉ Email đăng nhập</label>
+                <input 
+                  type="email" 
+                  required
+                  value={staffEmail} 
+                  onChange={(e) => setStaffEmail(e.target.value)} 
+                  placeholder="...@clinic.com" 
+                  className="input-control"
+                  style={{ paddingLeft: '1rem' }}
+                />
+              </div>
+
+              {/* Password */}
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Mật khẩu khởi tạo</label>
+                <input 
+                  type="password" 
+                  required
+                  value={staffPassword} 
+                  onChange={(e) => setStaffPassword(e.target.value)} 
+                  placeholder="••••••••" 
+                  className="input-control"
+                  style={{ paddingLeft: '1rem' }}
+                />
+              </div>
+
+              {/* Phone */}
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Số điện thoại</label>
+                <input 
+                  type="tel" 
+                  value={staffPhone} 
+                  onChange={(e) => setStaffPhone(e.target.value)} 
+                  placeholder="E.g. 0901234567" 
+                  className="input-control"
+                  style={{ paddingLeft: '1rem' }}
+                />
+              </div>
+
+              {/* Birth Date */}
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Ngày sinh</label>
+                <input 
+                  type="date" 
+                  data-date={staffBirthDate ? formatDate(staffBirthDate) : 'dd/mm/yyyy'}
+                  value={staffBirthDate} 
+                  onChange={(e) => setStaffBirthDate(e.target.value)} 
+                  className="input-control"
+                  style={{ paddingLeft: '1rem' }}
+                />
+                {staffBirthDate && (
+                  <p style={{ fontSize: '11px', color: 'var(--color-primary)', marginTop: '0.25rem', fontWeight: 600 }}>
+                    Ngày sinh đã chọn: {formatDate(staffBirthDate)}
+                  </p>
+                )}
+              </div>
+
+              {/* Actions */}
+              <div className="modal-footer pt-3" style={{ borderTop: '1px solid var(--border-light)' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowCreateStaffModal(false)}
+                  className="btn btn-secondary flex-1"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingStaff}
+                  className="btn btn-primary flex-1"
+                >
+                  {isSavingStaff ? 'Đang tạo...' : 'Xác nhận tạo'}
                 </button>
               </div>
             </form>
@@ -508,12 +712,18 @@ export default function DoctorManagementPage() {
                 <input
                   type="date"
                   required
+                  data-date={workDate ? formatDate(workDate) : 'dd/mm/yyyy'}
                   value={workDate}
                   min={new Date().toISOString().split('T')[0]}
                   onChange={(e) => setWorkDate(e.target.value)}
                   className="input-control"
                   style={{ paddingLeft: '1rem' }}
                 />
+                {workDate && (
+                  <p style={{ fontSize: '11px', color: 'var(--color-primary)', marginTop: '0.25rem', fontWeight: 600 }}>
+                    Ngày làm việc đã chọn: {formatDate(workDate)}
+                  </p>
+                )}
               </div>
 
               {/* Start & End time */}

@@ -33,22 +33,69 @@ export class AppointmentsService {
   //kiểm tra slot có nằm trong quá khứ so với thời gian hiện tại hay không
   private isSlotInPast(slotDate: Date, slotStartTime: Date): boolean {
     const now = new Date();
+    // Chuyển sang múi giờ Việt Nam (UTC+7) để so sánh thực tế
+    const vnTime = new Date(now.getTime() + 7 * 60 * 60 * 1000);
+
     const slotDateStr = slotDate.toISOString().split('T')[0];
-    const todayStr = now.toISOString().split('T')[0];
+    
+    const year = vnTime.getUTCFullYear();
+    const month = String(vnTime.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(vnTime.getUTCDate()).padStart(2, '0');
+    const todayStr = `${year}-${month}-${day}`;
 
     if (slotDateStr < todayStr) {
       return true;
     }
     if (slotDateStr === todayStr) {
-      const hours = String(now.getUTCHours()).padStart(2, '0');
-      const minutes = String(now.getUTCMinutes()).padStart(2, '0');
-      const seconds = String(now.getUTCSeconds()).padStart(2, '0');
+      const hours = String(vnTime.getUTCHours()).padStart(2, '0');
+      const minutes = String(vnTime.getUTCMinutes()).padStart(2, '0');
+      const seconds = String(vnTime.getUTCSeconds()).padStart(2, '0');
       const currentTimeOfDay = new Date(
         `1970-01-01T${hours}:${minutes}:${seconds}.000Z`,
       );
       return slotStartTime.getTime() <= currentTimeOfDay.getTime();
     }
     return false;
+  }
+
+  // Kết hợp ngày và giờ của slot thành đối tượng Date đầy đủ theo UTC
+  private getSlotFullDateTime(slotDate: Date, slotStartTime: Date): Date {
+    const slotDateStr = slotDate.toISOString().split('T')[0];
+    const startTimeISO = slotStartTime.toISOString();
+    const timeStr = startTimeISO.substring(11, 23); // Lấy phần 'HH:MM:SS.mmm'
+    return new Date(`${slotDateStr}T${timeStr}Z`);
+  }
+
+  // Tự động chuyển các lịch hẹn quá hạn check-in sang VẮNG MẶT (NO_SHOW) và giải phóng slot
+  async autoExpireAppointments() {
+    const now = new Date();
+    // Chuyển sang múi giờ Việt Nam (UTC+7) để đồng bộ với giờ hẹn lưu dạng local trong DB
+    const vnTime = new Date(now.getTime() + 7 * 60 * 60 * 1000);
+    const confirmedAppts = await this.prisma.appointment.findMany({
+      where: {
+        status: AppointmentStatus.CONFIRMED,
+      },
+      include: {
+        slot: true,
+      },
+    });
+
+    for (const appt of confirmedAppts) {
+      const apptTime = this.getSlotFullDateTime(appt.slot.date, appt.slot.startTime);
+      const lateTime = new Date(apptTime.getTime() + 5 * 60 * 1000); // Trễ quá 5 phút
+      if (vnTime > lateTime) {
+        await this.prisma.$transaction(async (tx) => {
+          await tx.appointment.update({
+            where: { id: appt.id },
+            data: { status: AppointmentStatus.NO_SHOW },
+          });
+          await tx.slot.update({
+            where: { id: appt.slotId },
+            data: { status: SlotStatus.AVAILABLE },
+          });
+        });
+      }
+    }
   }
   //nghiệp vụ đổi trạng thái slot->booked , tạo Appointment ở trạng thái Pending
   async create(createDto: CreateAppointmentsDto, currentUser: any) {
@@ -90,7 +137,8 @@ export class AppointmentsService {
                             start_time as "startTime", 
                             end_time as "endTime", 
                             work_schedule_id as "workScheduleId", 
-                            parent_slot_id as "parentSlotId" 
+                            parent_slot_id as "parentSlotId",
+                            is_walk_in_only as "isWalkInOnly"
                         FROM slots 
                         WHERE id = ${slotId}::uuid 
                         FOR UPDATE
@@ -104,6 +152,16 @@ export class AppointmentsService {
       if (slot.status !== SlotStatus.AVAILABLE) {
         throw new ConflictException(
           'khung giờ khám này đã được đặt trước hoặc bị khóa',
+        );
+      }
+
+      // Check if online booking is on a walk-in only slot
+      const bookingType = createDto.bookingType ||
+        (currentUser.role === Role.PATIENT ? BookingType.ONLINE : BookingType.WALK_IN);
+
+      if (bookingType === BookingType.ONLINE && slot.isWalkInOnly) {
+        throw new ForbiddenException(
+          'Khung giờ khám này chỉ dành riêng cho đăng ký trực tiếp tại quầy tiếp đón',
         );
       }
 
@@ -123,6 +181,31 @@ export class AppointmentsService {
         );
       }
 
+      // Kiểm tra xem bệnh nhân đã có cuộc hẹn nào đang hoạt động trong ca làm việc (workScheduleId) này chưa
+      const existingPatientAppt = await tx.appointment.findFirst({
+        where: {
+          patientId: finalPatientId,
+          slot: {
+            workScheduleId: slot.workScheduleId,
+          },
+          status: {
+            in: [
+              AppointmentStatus.PENDING,
+              AppointmentStatus.CONFIRMED,
+              AppointmentStatus.CHECKED_IN,
+              AppointmentStatus.IN_PROGRESS,
+              AppointmentStatus.COMPLETED,
+            ],
+          },
+        },
+      });
+
+      if (existingPatientAppt) {
+        throw new ConflictException(
+          'Bệnh nhân đã đăng ký một lịch hẹn khác trong cùng ca làm việc này của bác sĩ!',
+        );
+      }
+
       //kiểm tra slot có trong quá khứ không
       const slotDate = new Date(slot.date);
       const slotStartTime = new Date(slot.startTime);
@@ -139,12 +222,9 @@ export class AppointmentsService {
           slotId: slot.id,
           symptoms: symptoms || null,
           notes: notes || null,
-          status: AppointmentStatus.PENDING,
-          bookingType:
-            createDto.bookingType ||
-            (currentUser.role === Role.PATIENT
-              ? BookingType.ONLINE
-              : BookingType.WALK_IN),
+          status: AppointmentStatus.CONFIRMED,
+          bookingType,
+          isPriority: createDto.isPriority || false,
         },
         include: {
           patient: {
@@ -244,6 +324,7 @@ export class AppointmentsService {
   }
   //lấy danh sách lịch hẹn khám bênh theo phân quyền và bộ lọc
   async findAll(query: QueryAppointmentsDto, currentUser: any) {
+    await this.autoExpireAppointments();
     const where: any = {};
     //áp đặt phân quyền theo vai trò người dùng
     if (currentUser.role === Role.PATIENT) {
@@ -308,6 +389,7 @@ export class AppointmentsService {
             },
           },
           slot: true,
+          queueEntry: true,
         },
         orderBy: { createdAt: 'desc' },
       }),
@@ -437,14 +519,15 @@ export class AppointmentsService {
     if (!appointment) {
       throw new NotFoundException('khôn tìm thấy dữ liệu cuộc hẹn yêu cầu');
     }
-    // ràng buộc chỉ cho thay đổi trạng thái lịch hẹn khi ở trạng thái PENDING hoặc trạng thái CONFIRMED
+    // ràng buộc chỉ cho thay đổi trạng thái lịch hẹn khi ở trạng thái PENDING, CONFIRMED hoặc NO_SHOW
     const allowedRescheduleStatus: AppointmentStatus[] = [
       AppointmentStatus.PENDING,
       AppointmentStatus.CONFIRMED,
+      AppointmentStatus.NO_SHOW,
     ];
     if (!allowedRescheduleStatus.includes(appointment.status)) {
       throw new BadRequestException(
-        `không thể thai đổi lịch hẹn ở trạng thái hiện tại : ${appointment.status}`,
+        `không thể thay đổi lịch hẹn ở trạng thái hiện tại : ${appointment.status}`,
       );
     }
     //kiểm tra quyền hạng bệnh nhân chỉ được thay đổi lịch hẹn của chính mình
@@ -471,7 +554,8 @@ export class AppointmentsService {
                      start_time as "startTime",
                      end_time as "endTime",
                      work_schedule_id as "workScheduleId",
-                     parent_slot_id as "parentSlotId"
+                     parent_slot_id as "parentSlotId",
+                     is_walk_in_only as "isWalkInOnly"
                      FROM slots
                      WHERE id=${newSlotId}::uuid
                      FOR UPDATE`;
@@ -481,12 +565,48 @@ export class AppointmentsService {
         );
       }
       const newSlot = newSlots[0];
+
+      // Block online rescheduling into walk-in only slots
+      if (appointment.bookingType === BookingType.ONLINE && newSlot.isWalkInOnly) {
+        throw new ForbiddenException(
+          'Khung giờ khám này chỉ dành riêng cho đăng ký trực tiếp tại quầy tiếp đón',
+        );
+      }
+
       //kiểm tra slot có khả dụng hay không
       if (newSlot.status !== SlotStatus.AVAILABLE) {
         throw new ConflictException(
           'slot khám mới đã được đặt trước hoặc bị khóa',
         );
       }
+      // Ràng buộc 1 bệnh nhân không được đặt 2 lịch hẹn trong 1 lịch trình làm việc
+      const existingPatientAppt = await tx.appointment.findFirst({
+        where: {
+          patientId: appointment.patientId,
+          id: {
+            not: appointment.id, // Loại trừ chính lịch hẹn đang được đổi
+          },
+          slot: {
+            workScheduleId: newSlot.workScheduleId,
+          },
+          status: {
+            in: [
+              AppointmentStatus.PENDING,
+              AppointmentStatus.CONFIRMED,
+              AppointmentStatus.CHECKED_IN,
+              AppointmentStatus.IN_PROGRESS,
+              AppointmentStatus.COMPLETED,
+            ],
+          },
+        },
+      });
+
+      if (existingPatientAppt) {
+        throw new ConflictException(
+          'Bệnh nhân đã đăng ký một lịch hẹn khác trong cùng ca làm việc này của bác sĩ!',
+        );
+      }
+
       //kiểm tra slot mới vừa tạo có nằm trong quá khứ hay không
       const slotDate = new Date(newSlot.date);
       const slotStartTime = new Date(newSlot.startTime);
@@ -511,6 +631,7 @@ export class AppointmentsService {
         data: {
           slotId: newSlotId, // Gán cuộc hẹn này vào một khung giờ (slot) mới
           doctorId: newSlot.doctorId, // cập nhật bác sĩ mới nếu đổi bác sĩ
+          status: appointment.status === AppointmentStatus.NO_SHOW ? AppointmentStatus.CONFIRMED : appointment.status,
         },
         include: {
           patient: {
@@ -567,6 +688,36 @@ export class AppointmentsService {
         `không thể đánh dấu vắng mặt ở trạng thái lịch hẹn hiện tại : ${appointment.status}`,
       );
     }
+
+    if (currentUser.role === Role.DOCTOR) {
+      const doctor = await this.prisma.doctor.findUnique({
+        where: { userId: currentUser.userId },
+      });
+      if (!doctor || appointment.doctorId !== doctor.id) {
+        throw new ForbiddenException(
+          'bạn không có quyền đánh dấu vắng mặt cho cuộc hẹn của bác sĩ khác',
+        );
+      }
+
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      const todayStr = `${year}-${month}-${day}`;
+
+      const slotDate = appointment.slot.date;
+      const slotYear = slotDate.getUTCFullYear();
+      const slotMonth = String(slotDate.getUTCMonth() + 1).padStart(2, '0');
+      const slotDay = String(slotDate.getUTCDate()).padStart(2, '0');
+      const slotDateStr = `${slotYear}-${slotMonth}-${slotDay}`;
+
+      if (todayStr !== slotDateStr) {
+        throw new BadRequestException(
+          'Bác sĩ chỉ được phép đánh dấu vắng mặt cho lịch hẹn trong ngày hiện tại!',
+        );
+      }
+    }
+
     return this.prisma.$transaction(async (tx) => {
       //cập nhật trạng thái cuộc hẹn thành no show
       await tx.appointment.update({
@@ -638,6 +789,43 @@ export class AppointmentsService {
     if (appointment.status !== AppointmentStatus.CONFIRMED) {
       throw new BadRequestException(
         `chỉ có thể checkin với lịch hẹn ở trạng thái CONFIRMED trạng thái lịch hẹn hiện tại là ${appointment.status}`,
+      );
+    }
+
+    // Kiểm tra khung giờ check-in (trước khung giờ khám và trễ nhất là 5 phút sau khi bắt đầu khung giờ khám)
+    const now = new Date();
+    // Chuyển sang múi giờ Việt Nam (UTC+7) để đồng bộ với giờ hẹn lưu dạng local trong DB
+    const vnTime = new Date(now.getTime() + 7 * 60 * 60 * 1000);
+    const apptTime = this.getSlotFullDateTime(appointment.slot.date, appointment.slot.startTime);
+    const endWindow = new Date(apptTime.getTime() + 5 * 60 * 1000);
+
+    // Kiểm tra ngày của lịch hẹn
+    const slotDateStr = appointment.slot.date.toISOString().split('T')[0];
+    const year = vnTime.getUTCFullYear();
+    const month = String(vnTime.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(vnTime.getUTCDate()).padStart(2, '0');
+    const todayStr = `${year}-${month}-${day}`;
+
+    if (slotDateStr !== todayStr) {
+      throw new BadRequestException(
+        'Chỉ có thể thực hiện check-in vào ngày của lịch hẹn.',
+      );
+    }
+
+    if (vnTime > endWindow) {
+      // Đã quá giờ check-in, tự động chuyển thành Vắng mặt và giải phóng slot
+      await this.prisma.$transaction(async (tx) => {
+        await tx.appointment.update({
+          where: { id },
+          data: { status: AppointmentStatus.NO_SHOW },
+        });
+        await tx.slot.update({
+          where: { id: appointment.slotId },
+          data: { status: SlotStatus.AVAILABLE },
+        });
+      });
+      throw new BadRequestException(
+        'Lịch hẹn đã quá thời gian check-in (trễ hơn 5 phút). Trạng thái lịch đã được chuyển thành Vắng mặt và giải phóng khung giờ khám.',
       );
     }
     //kiểm tra quyền bệnh nhân chỉ được phép checkin cho lịch hẹn của chính mình
@@ -740,6 +928,24 @@ export class AppointmentsService {
       if (!doctor || appointment.doctorId !== doctor.id) {
         throw new ForbiddenException(
           'bạn không có quyền bắt đầu khám cho cuộc hẹn của bác sĩ khác',
+        );
+      }
+
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      const todayStr = `${year}-${month}-${day}`;
+
+      const slotDate = appointment.slot.date;
+      const slotYear = slotDate.getUTCFullYear();
+      const slotMonth = String(slotDate.getUTCMonth() + 1).padStart(2, '0');
+      const slotDay = String(slotDate.getUTCDate()).padStart(2, '0');
+      const slotDateStr = `${slotYear}-${slotMonth}-${slotDay}`;
+
+      if (todayStr !== slotDateStr) {
+        throw new BadRequestException(
+          'Bác sĩ chỉ được phép bắt đầu khám cho lịch hẹn trong ngày hiện tại!',
         );
       }
     }
@@ -867,6 +1073,24 @@ export class AppointmentsService {
       if (!doctor || appointment.doctorId !== doctor.id) {
         throw new ForbiddenException(
           'bạn không có quyền hoàn thành khám cho cuộc hẹn của bác sĩ khác',
+        );
+      }
+
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      const todayStr = `${year}-${month}-${day}`;
+
+      const slotDate = appointment.slot.date;
+      const slotYear = slotDate.getUTCFullYear();
+      const slotMonth = String(slotDate.getUTCMonth() + 1).padStart(2, '0');
+      const slotDay = String(slotDate.getUTCDate()).padStart(2, '0');
+      const slotDateStr = `${slotYear}-${slotMonth}-${slotDay}`;
+
+      if (todayStr !== slotDateStr) {
+        throw new BadRequestException(
+          'Bác sĩ chỉ được phép hoàn thành khám cho lịch hẹn trong ngày hiện tại!',
         );
       }
     }

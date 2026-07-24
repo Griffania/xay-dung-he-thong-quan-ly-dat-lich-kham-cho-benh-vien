@@ -2,6 +2,8 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
+  Delete,
   Body,
   Param,
   Query,
@@ -9,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -66,5 +69,21 @@ export class UsersController {
   @Roles(Role.ADMIN)
   unlock(@Param('id') id: string) {
     return this.usersService.unlock(id);
+  }
+
+  // Cập nhật thông tin chi tiết một người dùng
+  // Quyền truy cập: Chỉ dành cho ADMIN
+  @Patch(':id')
+  @Roles(Role.ADMIN)
+  update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
+    return this.usersService.update(id, updateUserDto);
+  }
+
+  // Xóa tài khoản người dùng
+  // Quyền truy cập: Chỉ dành cho ADMIN
+  @Delete(':id')
+  @Roles(Role.ADMIN)
+  remove(@Param('id') id: string) {
+    return this.usersService.remove(id);
   }
 }

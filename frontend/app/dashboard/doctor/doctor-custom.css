@@ -640,3 +640,229 @@
 .pt-3 { padding-top: 0.75rem; }
 .pl-4 { padding-left: 1rem; }
 .pr-1 { padding-right: 0.25rem; }
+
+/* Tab navigation inside Doctor Schedule Dashboard */
+.panel-header-with-tabs {
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 1.5rem;
+  padding-bottom: 0.5rem;
+}
+
+.doctor-tabs {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+}
+
+.doctor-tab-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1.25rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+}
+
+.doctor-tab-btn:hover {
+  color: var(--color-primary);
+  background-color: rgba(59, 130, 246, 0.04);
+}
+
+.doctor-tab-btn.active {
+  color: #ffffff;
+  background-color: var(--color-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Slots Grid and Cards */
+.slots-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1.25rem;
+  padding: 0.25rem;
+}
+
+.slot-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 1.25rem;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-white);
+  transition: all 0.2s ease;
+  min-height: 160px;
+}
+
+.slot-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.slot-card.available {
+  border-left: 4px solid var(--color-success);
+}
+
+.slot-card.locked {
+  border-left: 4px solid var(--text-light);
+  background-color: var(--bg-primary);
+}
+
+.slot-card.booked {
+  border-left: 4px solid var(--color-primary);
+}
+
+.slot-time-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.slot-clock-icon {
+  width: 1.125rem;
+  height: 1.125rem;
+  color: var(--text-muted);
+}
+
+.slot-time-text {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.slot-status-info {
+  margin-bottom: 1rem;
+}
+
+.slot-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.25rem 0.625rem;
+  border-radius: 9999px;
+}
+
+.status-available {
+  background-color: #ecfdf5;
+  color: var(--color-success);
+}
+
+.status-locked {
+  background-color: #f1f5f9;
+  color: var(--text-muted);
+}
+
+.status-booked {
+  background-color: #eff6ff;
+  color: var(--color-primary);
+}
+
+.slot-booked-patient {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.slot-patient-name {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
+}
+
+.slot-card-actions {
+  display: flex;
+  margin-top: auto;
+}
+
+.btn-lock-slot {
+  width: 100%;
+  padding: 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  color: var(--color-danger);
+  border: 1px solid rgba(220, 38, 38, 0.2);
+  background-color: rgba(220, 38, 38, 0.02);
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-lock-slot:hover:not(:disabled) {
+  background-color: var(--color-danger);
+  color: #ffffff;
+  border-color: var(--color-danger);
+}
+
+.btn-unlock-slot {
+  width: 100%;
+  padding: 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  color: var(--color-success);
+  border: 1px solid rgba(5, 150, 105, 0.2);
+  background-color: rgba(5, 150, 105, 0.02);
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-unlock-slot:hover:not(:disabled) {
+  background-color: var(--color-success);
+  color: #ffffff;
+  border-color: var(--color-success);
+}
+
+.btn-disabled-slot {
+  width: 100%;
+  padding: 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-light);
+  border: 1px solid var(--border-color);
+  background-color: var(--border-light);
+  border-radius: 0.5rem;
+  cursor: not-allowed;
+}
+
+.spinner-sm {
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  display: inline-block;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

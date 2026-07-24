@@ -7,6 +7,7 @@ import {
   Query,
   UseGuards,
   Body,
+  Req,
 } from '@nestjs/common';
 import { SlotsService } from './slots.service';
 import { QueryAvailableSlotsDto } from './dto/query-available-slots.dto';
@@ -28,33 +29,34 @@ export class SlotsController {
   }
 
   //Khóa thủ công một slot khám
-  //Quyền truy cập: Chỉ dành cho ADMIN
+  //Quyền truy cập: ADMIN hoặc DOCTOR
   @Patch(':id/lock')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.ADMIN)
-  lockSlot(@Param('id') id: string) {
-    return this.slotsService.lockSlot(id);
+  @Roles(Role.ADMIN, Role.DOCTOR)
+  lockSlot(@Param('id') id: string, @Req() req: any) {
+    return this.slotsService.lockSlot(id, req.user);
   }
 
   // Mở khóa lại slot đã bị khóa thủ công
-  // Quyền truy cập: Chỉ dành cho ADMIN
+  // Quyền truy cập: ADMIN hoặc DOCTOR
   @Patch(':id/unlock')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.ADMIN)
-  unlockSlot(@Param('id') id: string) {
-    return this.slotsService.unlockSlot(id);
+  @Roles(Role.ADMIN, Role.DOCTOR)
+  unlockSlot(@Param('id') id: string, @Req() req: any) {
+    return this.slotsService.unlockSlot(id, req.user);
   }
 
-  //Kích hoạt thủ công chức năng tách slot (để thử nghiệm hoặc xử lý lỗi)
-  // Quyền truy cập: Chỉ dành cho ADMIN
+  //Kích hoạt thủ công chức năng tách slot hoặc tự động kích hoạt khi bác sĩ kết thúc sớm
+  // Quyền truy cập: ADMIN hoặc DOCTOR
   @Post(':id/split')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.ADMIN)
+  @Roles(Role.ADMIN, Role.DOCTOR)
   splitSlot(
     @Param('id') id: string,
+    @Req() req: any,
     @Body('completedAt') completedAtStr?: string,
   ) {
     const completedAt = completedAtStr ? new Date(completedAtStr) : new Date();
-    return this.slotsService.splitSlot(id, completedAt);
+    return this.slotsService.splitSlot(id, completedAt, req.user);
   }
 }
